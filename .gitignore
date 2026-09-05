@@ -1,0 +1,36 @@
+# Unity generated folders
+/Library/
+/Temp/
+/Obj/
+/Build/
+/Builds/
+/Logs/
+/UserSettings/
+/MemoryCaptures/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Asset meta backups
+*.tmp
+
+# Crashlytics
+crashlytics-build.properties

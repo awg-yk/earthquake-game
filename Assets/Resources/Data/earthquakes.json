@@ -1,0 +1,159 @@
+{
+  "earthquakes": [
+    {
+      "date": "2000-01-05",
+      "time": "09:12",
+      "epicenter": "宮城県沖",
+      "latitude": 38.2,
+      "longitude": 142.3,
+      "magnitude": 5.8,
+      "intensities": { "宮城県": "4", "岩手県": "3", "福島県": "3" }
+    },
+    {
+      "date": "2000-02-14",
+      "time": "23:40",
+      "epicenter": "択捉島南東沖",
+      "latitude": 44.5,
+      "longitude": 149.5,
+      "magnitude": 6.5,
+      "intensities": { "北海道": "5弱" }
+    },
+    {
+      "date": "2000-03-20",
+      "time": "14:02",
+      "epicenter": "伊豆諸島近海",
+      "latitude": 34.2,
+      "longitude": 139.3,
+      "magnitude": 6.0,
+      "intensities": { "東京都": "3", "神奈川県": "3" }
+    },
+    {
+      "date": "2000-05-01",
+      "time": "05:33",
+      "epicenter": "紀伊水道",
+      "latitude": 33.9,
+      "longitude": 135.0,
+      "magnitude": 5.5,
+      "intensities": { "和歌山県": "5弱", "徳島県": "4", "大阪府": "3" }
+    },
+    {
+      "date": "2000-07-08",
+      "time": "18:45",
+      "epicenter": "岐阜県美濃中西部",
+      "latitude": 35.6,
+      "longitude": 136.7,
+      "magnitude": 5.2,
+      "intensities": { "岐阜県": "4", "愛知県": "3", "滋賀県": "3" }
+    },
+    {
+      "date": "2000-09-15",
+      "time": "02:10",
+      "epicenter": "鳥取県中部",
+      "latitude": 35.4,
+      "longitude": 133.6,
+      "magnitude": 6.2,
+      "intensities": { "鳥取県": "6弱", "岡山県": "4", "島根県": "4", "兵庫県": "3" }
+    },
+    {
+      "date": "2000-11-02",
+      "time": "11:20",
+      "epicenter": "福岡県北西沖",
+      "latitude": 33.8,
+      "longitude": 130.2,
+      "magnitude": 5.9,
+      "intensities": { "福岡県": "5強", "佐賀県": "4", "山口県": "3" }
+    },
+    {
+      "date": "2001-01-10",
+      "time": "07:55",
+      "epicenter": "十勝沖",
+      "latitude": 41.8,
+      "longitude": 144.0,
+      "magnitude": 7.0,
+      "intensities": { "北海道": "6弱" }
+    },
+    {
+      "date": "2001-03-24",
+      "time": "15:27",
+      "epicenter": "安芸灘",
+      "latitude": 34.1,
+      "longitude": 132.6,
+      "magnitude": 6.4,
+      "intensities": { "広島県": "6弱", "山口県": "5弱", "愛媛県": "4", "岡山県": "4" }
+    },
+    {
+      "date": "2001-06-18",
+      "time": "20:03",
+      "epicenter": "茨城県沖",
+      "latitude": 36.5,
+      "longitude": 141.2,
+      "magnitude": 6.1,
+      "intensities": { "茨城県": "5強", "千葉県": "4", "栃木県": "3", "福島県": "3" }
+    },
+    {
+      "date": "2001-08-30",
+      "time": "13:14",
+      "epicenter": "熊本県熊本地方",
+      "latitude": 32.8,
+      "longitude": 130.7,
+      "magnitude": 5.6,
+      "intensities": { "熊本県": "5弱", "大分県": "3", "福岡県": "3" }
+    },
+    {
+      "date": "2002-02-11",
+      "time": "04:48",
+      "epicenter": "長野県中部",
+      "latitude": 36.2,
+      "longitude": 138.0,
+      "magnitude": 5.4,
+      "intensities": { "長野県": "5弱", "新潟県": "3", "山梨県": "3" }
+    },
+    {
+      "date": "2002-05-26",
+      "time": "19:22",
+      "epicenter": "宮城県沖",
+      "latitude": 38.1,
+      "longitude": 142.0,
+      "magnitude": 7.0,
+      "intensities": { "宮城県": "6弱", "岩手県": "5強", "福島県": "5弱", "山形県": "4", "秋田県": "3" }
+    },
+    {
+      "date": "2003-05-26",
+      "time": "18:24",
+      "epicenter": "三陸沖",
+      "latitude": 38.8,
+      "longitude": 141.6,
+      "magnitude": 7.1,
+      "intensities": { "岩手県": "6弱", "宮城県": "5強", "青森県": "4", "秋田県": "4" }
+    },
+    {
+      "date": "2004-10-23",
+      "time": "17:56",
+      "epicenter": "新潟県中越地方",
+      "latitude": 37.3,
+      "longitude": 138.9,
+      "magnitude": 6.8,
+      "intensities": { "新潟県": "7", "群馬県": "4", "福島県": "4", "長野県": "4" }
+    },
+    {
+      "date": "2011-03-11",
+      "time": "14:46",
+      "epicenter": "三陸沖",
+      "latitude": 38.1,
+      "longitude": 142.9,
+      "magnitude": 9.0,
+      "intensities": {
+        "宮城県": "7",
+        "福島県": "6強",
+        "岩手県": "6弱",
+        "茨城県": "6強",
+        "栃木県": "6弱",
+        "群馬県": "5強",
+        "埼玉県": "5強",
+        "千葉県": "5強",
+        "東京都": "5強",
+        "神奈川県": "5弱"
+      }
+    }
+  ]
+}
