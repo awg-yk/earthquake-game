@@ -48,7 +48,10 @@ public static class SceneBuilder
         Button circleButton = CreateButton(canvas.transform, "CircleButton", 360, -260, 120, 50, "丸");
 
         Slider placementSlider = CreateSlider(canvas.transform, "PlacementSlider", 230, -320, 380, 30, -4f, 4f, 0f);
+        Text placementPositionText = CreateText(canvas.transform, "PlacementPositionText", 230, -285, 380, 30, 18, "配置位置：0.0");
+        placementPositionText.alignment = TextAnchor.MiddleCenter;
         Button placeButton = CreateButton(canvas.transform, "PlaceButton", 230, -370, 200, 50, "積む（次の日へ）");
+        Transform dropIndicator = CreateDropIndicator();
 
         GameObject roundEndPanel = CreateRoundEndPanel(canvas.transform, out Text roundEndScoreText, out Button restartButton);
 
@@ -85,6 +88,8 @@ public static class SceneBuilder
         gameManager.roundEndPanel = roundEndPanel;
         gameManager.roundEndScoreText = roundEndScoreText;
         gameManager.placementSlider = placementSlider;
+        gameManager.placementPositionText = placementPositionText;
+        gameManager.dropIndicator = dropIndicator;
 
         mapManager.prefectureButtonPrefab = prefectureButtonTemplate;
         mapManager.buttonContainer = buttonContainer.transform;
@@ -222,6 +227,26 @@ public static class SceneBuilder
         return button;
     }
 
+    // Full-stretch RectTransform (anchors 0..1) inset by the given margins,
+    // used for slider sub-parts so the Fill bar actually resizes with value
+    // instead of staying a fixed size like a center-anchored Rect would.
+    private static RectTransform SetupStretchRect(GameObject obj, Transform parent, float insetLeft, float insetRight, float insetTop, float insetBottom)
+    {
+        RectTransform rt = obj.GetComponent<RectTransform>();
+        if (rt == null) rt = obj.AddComponent<RectTransform>();
+        rt.SetParent(parent, false);
+        rt.anchorMin = new Vector2(0, 0);
+        rt.anchorMax = new Vector2(1, 1);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.offsetMin = new Vector2(insetLeft, insetBottom);
+        rt.offsetMax = new Vector2(-insetRight, -insetTop);
+        return rt;
+    }
+
+    // A slider redesigned to make "where the block will land" obvious:
+    // a thick, high-contrast track with tick marks at each whole unit and a
+    // bold circular handle, plus (wired up separately in BuildMainScene) a
+    // world-space drop marker and a live numeric readout above it.
     private static Slider CreateSlider(Transform parent, string name, float x, float y, float w, float h, float min, float max, float defaultValue)
     {
         GameObject sliderObj = new GameObject(name);
@@ -229,32 +254,53 @@ public static class SceneBuilder
         Slider slider = sliderObj.AddComponent<Slider>();
 
         GameObject background = new GameObject("Background");
-        var bgRect = SetupRect(background, sliderObj.transform, 0, 0, w, h);
+        SetupStretchRect(background, sliderObj.transform, 0, 0, 0, 0);
         var bgImage = background.AddComponent<Image>();
-        bgImage.color = new Color(0.8f, 0.8f, 0.8f);
+        bgImage.color = new Color(0.25f, 0.28f, 0.32f);
+
+        // Tick marks at every integer position so the player can see how the
+        // slider range maps onto discrete-looking spots along the base.
+        int tickCount = Mathf.RoundToInt(max - min) + 1;
+        for (int i = 0; i < tickCount; i++)
+        {
+            float t = tickCount > 1 ? (float)i / (tickCount - 1) : 0.5f;
+            GameObject tick = new GameObject("Tick");
+            RectTransform tickRect = tick.AddComponent<RectTransform>();
+            tickRect.SetParent(background.transform, false);
+            tickRect.anchorMin = new Vector2(t, 0);
+            tickRect.anchorMax = new Vector2(t, 1);
+            tickRect.pivot = new Vector2(0.5f, 0.5f);
+            tickRect.sizeDelta = new Vector2(2, 0);
+            tickRect.anchoredPosition = Vector2.zero;
+            var tickImage = tick.AddComponent<Image>();
+            tickImage.color = new Color(1f, 1f, 1f, 0.35f);
+        }
 
         GameObject fillArea = new GameObject("Fill Area");
-        SetupRect(fillArea, sliderObj.transform, 0, 0, w, h);
+        SetupStretchRect(fillArea, sliderObj.transform, 10, 10, 0, 0);
 
         GameObject fill = new GameObject("Fill");
-        var fillRect = SetupRect(fill, fillArea.transform, 0, 0, w, h);
+        var fillRect = SetupStretchRect(fill, fillArea.transform, 0, 0, 0, 0);
         var fillImage = fill.AddComponent<Image>();
-        fillImage.color = new Color(0.4f, 0.6f, 0.9f);
+        fillImage.color = new Color(0.95f, 0.55f, 0.2f);
 
         GameObject handleArea = new GameObject("Handle Slide Area");
-        SetupRect(handleArea, sliderObj.transform, 0, 0, w, h);
+        SetupStretchRect(handleArea, sliderObj.transform, 10, 10, 0, 0);
 
         GameObject handle = new GameObject("Handle");
-        SetupRect(handle, handleArea.transform, 0, 0, 20, h);
+        RectTransform handleRect = handle.AddComponent<RectTransform>();
+        handleRect.SetParent(handleArea.transform, false);
+        handleRect.sizeDelta = new Vector2(28, h + 10);
         var handleImage = handle.AddComponent<Image>();
-        handleImage.color = new Color(0.2f, 0.2f, 0.2f);
+        handleImage.color = new Color(0.95f, 0.95f, 0.95f);
 
         slider.targetGraphic = handleImage;
         slider.fillRect = fillRect;
-        slider.handleRect = handle.GetComponent<RectTransform>();
+        slider.handleRect = handleRect;
         slider.direction = Slider.Direction.LeftToRight;
         slider.minValue = min;
         slider.maxValue = max;
+        slider.wholeNumbers = false;
         slider.value = defaultValue;
 
         return slider;
@@ -295,6 +341,32 @@ public static class SceneBuilder
         grid.constraintCount = 4;
 
         return container;
+    }
+
+    // A small downward-pointing arrow floating above the tower, showing
+    // exactly where the next block will drop. No collider/rigidbody - it's
+    // pure visual guidance and must never interact with the physics blocks.
+    private static Transform CreateDropIndicator()
+    {
+        GameObject obj = new GameObject("DropIndicator");
+        var meshFilter = obj.AddComponent<MeshFilter>();
+        var meshRenderer = obj.AddComponent<MeshRenderer>();
+        meshRenderer.sharedMaterial = new Material(Shader.Find("Sprites/Default"));
+        meshRenderer.sharedMaterial.color = new Color(0.9f, 0.15f, 0.15f);
+
+        float w = 0.35f;
+        float h = 0.45f;
+        var mesh = new Mesh();
+        mesh.vertices = new[]
+        {
+            new Vector3(-w, h, 0), new Vector3(w, h, 0), new Vector3(0, 0, 0)
+        };
+        mesh.triangles = new[] { 0, 1, 2 };
+        mesh.RecalculateNormals();
+        meshFilter.mesh = mesh;
+
+        obj.transform.position = new Vector3(0, 7f, -0.5f);
+        return obj.transform;
     }
 
     // A disabled template button that MapManager.Instantiate()s from at

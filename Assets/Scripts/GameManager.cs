@@ -43,6 +43,8 @@ namespace EarthquakeGame
         public GameObject roundEndPanel;
         public Text roundEndScoreText;
         public Slider placementSlider;
+        public Text placementPositionText;
+        public Transform dropIndicator;
 
         private DateTime currentDate;
         private int survivalDays;
@@ -52,6 +54,27 @@ namespace EarthquakeGame
         void Start()
         {
             StartNewGame();
+        }
+
+        // Keeps the drop-preview marker and position readout in sync with
+        // the slider every frame, so the player always sees exactly where
+        // the next block will land before pressing "積む".
+        void Update()
+        {
+            if (isRoundOver || placementSlider == null) return;
+
+            float x = placementSlider.value;
+
+            if (placementPositionText != null)
+            {
+                placementPositionText.text = $"配置位置：{x:0.0}";
+            }
+
+            if (dropIndicator != null)
+            {
+                float y = blockTowerManager != null ? blockTowerManager.GetNextSpawnY() + 0.6f : 5f;
+                dropIndicator.position = new Vector3(x, y, -0.5f);
+            }
         }
 
         public void StartNewGame()

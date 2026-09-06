@@ -37,6 +37,10 @@ namespace EarthquakeGame
 
         public int AliveBlockCount => aliveBlocks.Count;
 
+        // Height at which the next block would be dropped, useful for
+        // showing the player a "landing here" preview before they commit.
+        public float GetNextSpawnY() => GetCurrentTowerTopY() + spawnHeightMargin;
+
         public Block PlaceBlock(BlockShape shape, float xPosition)
         {
             xPosition = Mathf.Clamp(xPosition, -baseHalfWidth + blockSize * 0.5f, baseHalfWidth - blockSize * 0.5f);
