@@ -75,6 +75,38 @@ namespace EarthquakeGame
             return eventsByDate.TryGetValue(key, out var list) ? list : new List<EarthquakeEvent>();
         }
 
+        // Scans the whole given year and returns whichever prefecture felt
+        // the strongest single shindo at any point that year - used to pick
+        // where the player starts, so every playthrough opens at that
+        // year's most dramatic location instead of a fixed prefecture.
+        public string GetPrefectureWithStrongestQuake(int year)
+        {
+            string bestPrefecture = null;
+            int bestRank = -1;
+
+            int daysInYear = DateTime.IsLeapYear(year) ? 366 : 365;
+            DateTime day = new DateTime(year, 1, 1);
+
+            for (int i = 0; i < daysInYear; i++)
+            {
+                foreach (var ev in GetEarthquakesOn(day))
+                {
+                    foreach (var kv in ev.intensities)
+                    {
+                        int rank = IntensityScale.ToRank(kv.Value);
+                        if (rank > bestRank)
+                        {
+                            bestRank = rank;
+                            bestPrefecture = kv.Key;
+                        }
+                    }
+                }
+                day = day.AddDays(1);
+            }
+
+            return bestPrefecture;
+        }
+
         // Scans every day of the given month for earthquakes that hit any
         // prefecture at or above minRank, anywhere in Japan (not just the
         // player's location). Used by the fortune teller's monthly

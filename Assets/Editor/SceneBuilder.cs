@@ -88,7 +88,7 @@ public static class SceneBuilder
 
         var gameManager = gameManagerObj.AddComponent<GameManager>();
         var playerManager = playerManagerObj.AddComponent<PlayerManager>();
-        playerManager.moveIntervalDays = 1; // explicit, so a stale saved scene value can never override this
+        playerManager.moveIntervalDays = 5; // explicit, so a stale saved scene value can never override this
         var earthquakeManager = earthquakeManagerObj.AddComponent<EarthquakeManager>();
         var mapManager = mapManagerObj.AddComponent<MapManager>();
         var fortuneTeller = fortuneTellerObj.AddComponent<FortuneTeller>();
@@ -200,6 +200,7 @@ public static class SceneBuilder
         Object.DestroyImmediate(obj.GetComponent<BoxCollider2D>());
         var box = obj.AddComponent<BoxCollider2D>();
         box.size = Vector2.one;
+        box.sharedMaterial = BlockTowerManager.HighFrictionMaterial;
 
         var rb = obj.AddComponent<Rigidbody2D>();
         rb.bodyType = RigidbodyType2D.Kinematic;

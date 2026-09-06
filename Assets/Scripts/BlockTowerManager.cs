@@ -31,6 +31,31 @@ namespace EarthquakeGame
         [Tooltip("Y position below which a block is considered fallen/lost.")]
         public float fallenYThreshold = -3f;
 
+        [Header("Stability (blocks should only fall from real earthquakes)")]
+        public float blockMass = 3f;
+        public float blockLinearDrag = 1f;
+        public float blockAngularDrag = 2f;
+
+        // High friction, no bounce - shared by the base and every block so
+        // stacked blocks grip each other and don't slide/topple on their
+        // own; only an actual shake should be able to knock them over.
+        private static PhysicsMaterial2D highFrictionMaterial;
+        public static PhysicsMaterial2D HighFrictionMaterial
+        {
+            get
+            {
+                if (highFrictionMaterial == null)
+                {
+                    highFrictionMaterial = new PhysicsMaterial2D("BlockFriction")
+                    {
+                        friction = 1.2f,
+                        bounciness = 0f
+                    };
+                }
+                return highFrictionMaterial;
+            }
+        }
+
         private readonly List<Block> aliveBlocks = new List<Block>();
         private Vector3 basePlatformRestPosition;
         private Coroutine shakeCoroutine;
@@ -77,8 +102,13 @@ namespace EarthquakeGame
             Color color = new Color(0.85f, 0.45f, 0.4f);
             ShapeMeshFactory.Apply(obj, size, color);
 
+            var collider = obj.GetComponent<Collider2D>();
+            if (collider != null) collider.sharedMaterial = HighFrictionMaterial;
+
             var rb = obj.AddComponent<Rigidbody2D>();
-            rb.mass = 1f;
+            rb.mass = blockMass;
+            rb.drag = blockLinearDrag;
+            rb.angularDrag = blockAngularDrag;
 
             var block = obj.AddComponent<Block>();
             block.Setup(BlockShape.Rectangle);

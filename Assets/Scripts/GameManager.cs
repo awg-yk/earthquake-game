@@ -36,8 +36,8 @@ namespace EarthquakeGame
         public int maxStartYear = 2022;
         public string startingPrefecture = "東京都";
 
-        [Tooltip("Length of one round, in in-game days.")]
-        public int daysPerRound = 360;
+        [Tooltip("Length of one round, in in-game days - set automatically to 365 or 366 based on the chosen start year.")]
+        public int daysPerRound = 365;
 
         [Tooltip("Minimum felt intensity rank (3 = shindo 3) that actually shakes the tower - matches the real-world threshold where people notice shaking.")]
         public int minFeltRankToShake = 2;
@@ -152,11 +152,16 @@ namespace EarthquakeGame
 
             int year = UnityEngine.Random.Range(minStartYear, maxStartYear + 1);
             currentDate = new DateTime(year, 1, 1);
+            daysPerRound = DateTime.IsLeapYear(year) ? 366 : 365;
             survivalDays = 0;
             isRoundOver = false;
             PickNextShape();
 
-            playerManager.StartAt(startingPrefecture);
+            // Start wherever that year's single strongest earthquake hit,
+            // rather than a fixed prefecture - falls back to the default if
+            // the year happened to have no recorded quakes at all.
+            string startPrefecture = earthquakeManager != null ? earthquakeManager.GetPrefectureWithStrongestQuake(year) : null;
+            playerManager.StartAt(startPrefecture ?? startingPrefecture);
 
             if (blockTowerManager != null) blockTowerManager.ClearAllBlocks();
             if (roundEndPanel != null) roundEndPanel.SetActive(false);
