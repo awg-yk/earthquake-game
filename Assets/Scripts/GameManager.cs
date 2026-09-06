@@ -48,6 +48,7 @@ namespace EarthquakeGame
         public GameObject roundEndPanel;
         public Text roundEndScoreText;
         public Transform dropIndicator;
+        public GameObject shapePreview;
         public GameObject titleScreenPanel;
         public Text earthquakeAlertText;
         public IntensityMapView intensityMapView;
@@ -84,10 +85,16 @@ namespace EarthquakeGame
             Vector3 worldPos = Camera.main.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, distanceFromCamera));
             float x = blockTowerManager.ClampX(worldPos.x);
 
+            float spawnY = blockTowerManager.GetNextSpawnY();
+
             if (dropIndicator != null)
             {
-                float y = blockTowerManager.GetNextSpawnY() + 0.6f;
-                dropIndicator.position = new Vector3(x, y, -0.5f);
+                dropIndicator.position = new Vector3(x, spawnY + 1.1f, -0.5f);
+            }
+
+            if (shapePreview != null)
+            {
+                shapePreview.transform.position = new Vector3(x, spawnY + 0.5f, -0.5f);
             }
 
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
@@ -108,6 +115,7 @@ namespace EarthquakeGame
             survivalDays = 0;
             isRoundOver = false;
             selectedShape = BlockShape.Square;
+            RebuildShapePreview();
 
             playerManager.StartAt(startingPrefecture);
 
@@ -126,9 +134,41 @@ namespace EarthquakeGame
         }
 
         // Called by the shape-select buttons.
-        public void SelectSquare() => selectedShape = BlockShape.Square;
-        public void SelectTriangle() => selectedShape = BlockShape.Triangle;
-        public void SelectCircle() => selectedShape = BlockShape.Circle;
+        public void SelectSquare() => SetSelectedShape(BlockShape.Square);
+        public void SelectTriangle() => SetSelectedShape(BlockShape.Triangle);
+        public void SelectCircle() => SetSelectedShape(BlockShape.Circle);
+
+        private void SetSelectedShape(BlockShape shape)
+        {
+            selectedShape = shape;
+            RebuildShapePreview();
+        }
+
+        // Rebuilds the translucent shape preview shown just below the drop
+        // arrow, so the player can see exactly what they're about to drop
+        // before clicking. It has no collider - purely visual.
+        private void RebuildShapePreview()
+        {
+            if (shapePreview == null) return;
+
+            // DestroyImmediate (not Destroy) so the old MeshFilter/Renderer
+            // are actually gone before AddComponent below runs in the same
+            // frame - otherwise Unity would complain about duplicates.
+            foreach (var comp in shapePreview.GetComponents<Component>())
+            {
+                if (comp is Transform) continue;
+                DestroyImmediate(comp);
+            }
+
+            Color color = selectedShape switch
+            {
+                BlockShape.Square => new Color(0.85f, 0.4f, 0.4f, 0.6f),
+                BlockShape.Triangle => new Color(0.4f, 0.75f, 0.85f, 0.6f),
+                BlockShape.Circle => new Color(0.9f, 0.8f, 0.3f, 0.6f),
+                _ => new Color(1f, 1f, 1f, 0.6f)
+            };
+            ShapeMeshFactory.Apply(shapePreview, selectedShape, 0.6f, color, addCollider: false);
+        }
 
         // Called by MapManager when a prefecture button is clicked.
         public void OnPrefectureClicked(string prefectureName)
@@ -144,38 +184,58 @@ namespace EarthquakeGame
             survivalDays++;
 
             var todaysEvents = earthquakeManager.GetEarthquakesOn(currentDate);
-            EarthquakeEvent relevantForDisplay = todaysEvents.Count > 0 ? todaysEvents[0] : null;
 
-            int shakeRank = 0;
-            EarthquakeEvent shakingEvent = null;
+            // What the player actually feels at their own location (used
+            // for shake/sound and the "your area" line in the HUD).
+            int playerFeltRank = 0;
+            EarthquakeEvent playerEvent = null;
+
+            // The day's most notable earthquake anywhere in Japan (used for
+            // the alert banner + intensity map, shown even if it didn't
+            // reach the player's own prefecture at all).
+            EarthquakeEvent mostNotableEvent = null;
+            int mostNotableRank = -1;
+
             foreach (var ev in todaysEvents)
             {
                 // Rule: judge by the intensity actually observed in the
                 // player's prefecture, never by where the epicenter was.
                 string intensity = ev.GetIntensityFor(playerManager.CurrentPrefecture);
-                if (intensity == null) continue;
-
-                int rank = IntensityScale.ToRank(intensity);
-                if (rank > shakeRank)
+                int rank = intensity != null ? IntensityScale.ToRank(intensity) : 0;
+                if (rank > playerFeltRank)
                 {
-                    shakeRank = rank;
-                    shakingEvent = ev;
-                    relevantForDisplay = ev;
+                    playerFeltRank = rank;
+                    playerEvent = ev;
+                }
+
+                int evMaxRank = 0;
+                foreach (var kv in ev.intensities)
+                {
+                    int r = IntensityScale.ToRank(kv.Value);
+                    if (r > evMaxRank) evMaxRank = r;
+                }
+                if (evMaxRank > mostNotableRank)
+                {
+                    mostNotableRank = evMaxRank;
+                    mostNotableEvent = ev;
                 }
             }
 
-            if (shakeRank > 0)
+            if (playerFeltRank > 0)
             {
-                if (blockTowerManager != null) blockTowerManager.Shake(shakeRank);
-                if (cameraShaker != null) cameraShaker.Shake(shakeRank);
-                if (earthquakeSoundPlayer != null) earthquakeSoundPlayer.PlayRumble(shakeRank);
+                if (blockTowerManager != null) blockTowerManager.Shake(playerFeltRank);
+                if (cameraShaker != null) cameraShaker.Shake(playerFeltRank);
+                if (earthquakeSoundPlayer != null) earthquakeSoundPlayer.PlayRumble(playerFeltRank);
+            }
 
+            if (mostNotableEvent != null)
+            {
                 if (earthquakeAlertCoroutine != null) StopCoroutine(earthquakeAlertCoroutine);
-                earthquakeAlertCoroutine = StartCoroutine(ShowEarthquakeAlert(shakingEvent, shakeRank));
+                earthquakeAlertCoroutine = StartCoroutine(ShowEarthquakeAlert(mostNotableEvent, playerFeltRank));
             }
 
             playerManager.AdvanceOneDay();
-            RefreshUI(relevantForDisplay);
+            RefreshUI(playerEvent);
 
             if (survivalDays >= daysPerRound)
             {
@@ -183,23 +243,26 @@ namespace EarthquakeGame
             }
         }
 
-        private IEnumerator ShowEarthquakeAlert(EarthquakeEvent ev, int shakeRank)
+        private IEnumerator ShowEarthquakeAlert(EarthquakeEvent ev, int playerFeltRank)
         {
+            float duration = earthquakeAlertDuration + playerFeltRank * 0.3f;
+
             if (earthquakeAlertText != null)
             {
-                string intensityLabel = ev != null ? ev.GetIntensityFor(playerManager.CurrentPrefecture) : null;
-                earthquakeAlertText.text = ev != null
-                    ? $"地震発生！ 震央：{ev.epicenter}　M{ev.magnitude}\nあなたの地域の震度：{intensityLabel ?? "?"}"
-                    : "地震発生！";
+                string intensityLabel = ev.GetIntensityFor(playerManager.CurrentPrefecture);
+                string yourAreaLine = intensityLabel != null
+                    ? $"あなたの地域の震度：{intensityLabel}"
+                    : "あなたの地域では揺れは観測されませんでした";
+                earthquakeAlertText.text = $"地震発生！ 震央：{ev.epicenter}　M{ev.magnitude}\n{yourAreaLine}";
                 earthquakeAlertText.gameObject.SetActive(true);
             }
 
-            if (intensityMapView != null && ev != null)
+            if (intensityMapView != null)
             {
                 intensityMapView.SetIntensities(ev.intensities);
             }
 
-            yield return new WaitForSeconds(earthquakeAlertDuration);
+            yield return new WaitForSeconds(duration);
 
             if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
             if (intensityMapView != null) intensityMapView.ClearAll();

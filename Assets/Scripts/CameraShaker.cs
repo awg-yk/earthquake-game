@@ -9,7 +9,8 @@ namespace EarthquakeGame
     public class CameraShaker : MonoBehaviour
     {
         public float amplitudePerRank = 0.05f;
-        public float duration = 1.0f;
+        public float baseDuration = 0.8f;
+        public float durationPerRank = 0.35f;
         public float frequency = 30f;
 
         private Vector3 restPosition;
@@ -30,6 +31,7 @@ namespace EarthquakeGame
         private IEnumerator ShakeRoutine(int intensityRank)
         {
             float amplitude = amplitudePerRank * intensityRank;
+            float duration = baseDuration + durationPerRank * intensityRank;
             float elapsed = 0f;
 
             while (elapsed < duration)

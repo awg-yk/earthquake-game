@@ -7,7 +7,7 @@ namespace EarthquakeGame
     // runtime so the block tower works without any imported sprites.
     public static class ShapeMeshFactory
     {
-        public static void Apply(GameObject target, BlockShape shape, float size, Color color)
+        public static void Apply(GameObject target, BlockShape shape, float size, Color color, bool addCollider = true)
         {
             var meshFilter = target.AddComponent<MeshFilter>();
             var meshRenderer = target.AddComponent<MeshRenderer>();
@@ -18,20 +18,29 @@ namespace EarthquakeGame
             {
                 case BlockShape.Square:
                     meshFilter.mesh = BuildSquareMesh(size);
-                    var box = target.AddComponent<BoxCollider2D>();
-                    box.size = new Vector2(size, size);
+                    if (addCollider)
+                    {
+                        var box = target.AddComponent<BoxCollider2D>();
+                        box.size = new Vector2(size, size);
+                    }
                     break;
 
                 case BlockShape.Triangle:
                     meshFilter.mesh = BuildTriangleMesh(size);
-                    var poly = target.AddComponent<PolygonCollider2D>();
-                    poly.points = GetTrianglePoints(size);
+                    if (addCollider)
+                    {
+                        var poly = target.AddComponent<PolygonCollider2D>();
+                        poly.points = GetTrianglePoints(size);
+                    }
                     break;
 
                 case BlockShape.Circle:
                     meshFilter.mesh = BuildCircleMesh(size * 0.5f, 24);
-                    var circle = target.AddComponent<CircleCollider2D>();
-                    circle.radius = size * 0.5f;
+                    if (addCollider)
+                    {
+                        var circle = target.AddComponent<CircleCollider2D>();
+                        circle.radius = size * 0.5f;
+                    }
                     break;
             }
         }

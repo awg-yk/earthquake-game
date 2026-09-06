@@ -7,7 +7,8 @@ namespace EarthquakeGame
     // envelope) so the project needs no imported audio assets.
     public class EarthquakeSoundPlayer : MonoBehaviour
     {
-        public float duration = 1.2f;
+        public float baseDuration = 0.8f;
+        public float durationPerRank = 0.35f;
         public int sampleRate = 44100;
 
         private AudioSource audioSource;
@@ -30,6 +31,7 @@ namespace EarthquakeGame
 
         private AudioClip BuildRumbleClip(int intensityRank)
         {
+            float duration = baseDuration + durationPerRank * intensityRank;
             int sampleCount = Mathf.CeilToInt(duration * sampleRate);
             var samples = new float[sampleCount];
 

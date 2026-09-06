@@ -50,6 +50,8 @@ public static class SceneBuilder
         Text placementHintText = CreateText(canvas.transform, "PlacementHintText", 230, -230, 380, 30, 16, "形を選んで、土台をクリックすると積めます");
         placementHintText.alignment = TextAnchor.MiddleCenter;
         Transform dropIndicator = CreateDropIndicator();
+        GameObject shapePreview = new GameObject("ShapePreview");
+        shapePreview.transform.position = new Vector3(0, 7f, -0.5f);
 
         GameObject roundEndPanel = CreateRoundEndPanel(canvas.transform, out Text roundEndScoreText, out Button restartButton);
 
@@ -96,6 +98,7 @@ public static class SceneBuilder
         gameManager.roundEndPanel = roundEndPanel;
         gameManager.roundEndScoreText = roundEndScoreText;
         gameManager.dropIndicator = dropIndicator;
+        gameManager.shapePreview = shapePreview;
         gameManager.cameraShaker = mainCamera.GetComponent<CameraShaker>();
         gameManager.earthquakeSoundPlayer = mainCamera.GetComponent<EarthquakeSoundPlayer>();
         gameManager.earthquakeAlertText = earthquakeAlertText;

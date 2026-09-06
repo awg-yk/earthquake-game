@@ -20,7 +20,10 @@ namespace EarthquakeGame
         [Header("Shake settings")]
         [Tooltip("Screen/world units of shake amplitude per intensity rank point.")]
         public float shakeAmplitudePerRank = 0.08f;
-        public float shakeDuration = 1.2f;
+        [Tooltip("Minimum shake duration, in seconds, at the weakest felt intensity.")]
+        public float baseShakeDuration = 0.8f;
+        [Tooltip("Additional seconds of shaking added per intensity rank point.")]
+        public float shakeDurationPerRank = 0.35f;
         public float shakeFrequency = 25f;
 
         [Tooltip("Y position below which a block is considered fallen/lost.")]
@@ -102,12 +105,13 @@ namespace EarthquakeGame
         private IEnumerator ShakeRoutine(int intensityRank)
         {
             float amplitude = shakeAmplitudePerRank * intensityRank;
+            float duration = baseShakeDuration + shakeDurationPerRank * intensityRank;
             float elapsed = 0f;
 
-            while (elapsed < shakeDuration)
+            while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
-                float damping = 1f - (elapsed / shakeDuration);
+                float damping = 1f - (elapsed / duration);
                 float offsetX = Mathf.Sin(elapsed * shakeFrequency) * amplitude * damping;
                 baseRigidbody.MovePosition(basePlatformRestPosition + new Vector3(offsetX, 0, 0));
                 yield return null;
