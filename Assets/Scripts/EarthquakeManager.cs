@@ -75,52 +75,36 @@ namespace EarthquakeGame
             return eventsByDate.TryGetValue(key, out var list) ? list : new List<EarthquakeEvent>();
         }
 
-        // Looks ahead from (exclusive) startDate for up to dayRange days and
-        // returns the first earthquake found. Used by the fortune teller
-        // (Phase 2) to peek at future data without the player seeing it directly.
-        public EarthquakeEvent PeekFutureEarthquake(DateTime startDate, int dayRange)
+        // Scans every day of the given month for earthquakes that hit any
+        // prefecture at or above minRank, anywhere in Japan (not just the
+        // player's location). Used by the fortune teller's monthly
+        // forecast: it peeks at the whole month's future data at once and
+        // returns, per prefecture, the strongest intensity observed that
+        // month (only for prefectures that reached minRank at least once).
+        public Dictionary<string, string> GetPrefecturesWithQuakesInMonth(int year, int month, int minRank)
         {
-            for (int i = 1; i <= dayRange; i++)
-            {
-                var events = GetEarthquakesOn(startDate.AddDays(i));
-                if (events.Count > 0) return events[0];
-            }
-            return null;
-        }
+            var result = new Dictionary<string, string>();
+            int daysInMonth = DateTime.DaysInMonth(year, month);
 
-        // Scans ahead from (exclusive) startDate for up to dayRange days for
-        // the first earthquake that hits ANY prefecture at or above
-        // minRank, anywhere in Japan - not just the player's location. Used
-        // by the fortune teller for its precise "big one" forecast.
-        public (int daysUntil, string prefecture, string intensity)? FindNextBigQuake(DateTime startDate, int dayRange, int minRank)
-        {
-            for (int i = 1; i <= dayRange; i++)
+            for (int day = 1; day <= daysInMonth; day++)
             {
-                var events = GetEarthquakesOn(startDate.AddDays(i));
-                string bestPrefecture = null;
-                string bestIntensity = null;
-                int bestRank = 0;
-
+                var events = GetEarthquakesOn(new DateTime(year, month, day));
                 foreach (var ev in events)
                 {
                     foreach (var kv in ev.intensities)
                     {
                         int rank = IntensityScale.ToRank(kv.Value);
-                        if (rank >= minRank && rank > bestRank)
+                        if (rank < minRank) continue;
+
+                        if (!result.TryGetValue(kv.Key, out var existing) || rank > IntensityScale.ToRank(existing))
                         {
-                            bestRank = rank;
-                            bestPrefecture = kv.Key;
-                            bestIntensity = kv.Value;
+                            result[kv.Key] = kv.Value;
                         }
                     }
                 }
-
-                if (bestPrefecture != null)
-                {
-                    return (i, bestPrefecture, bestIntensity);
-                }
             }
-            return null;
+
+            return result;
         }
     }
 }

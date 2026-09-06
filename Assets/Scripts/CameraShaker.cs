@@ -15,10 +15,19 @@ namespace EarthquakeGame
 
         private Vector3 restPosition;
         private Coroutine shakeCoroutine;
+        private bool isShaking;
 
         void Awake()
         {
             restPosition = transform.position;
+        }
+
+        void LateUpdate()
+        {
+            // Keep tracking wherever the camera is meant to rest (e.g. the
+            // tower-height follow in GameManager moves it every frame) as
+            // long as we're not the ones currently displacing it for a shake.
+            if (!isShaking) restPosition = transform.position;
         }
 
         public void Shake(int intensityRank)
@@ -30,6 +39,7 @@ namespace EarthquakeGame
 
         private IEnumerator ShakeRoutine(int intensityRank)
         {
+            isShaking = true;
             float amplitude = amplitudePerRank * intensityRank;
             float duration = baseDuration + durationPerRank * intensityRank;
             float elapsed = 0f;
@@ -45,6 +55,7 @@ namespace EarthquakeGame
             }
 
             transform.position = restPosition;
+            isShaking = false;
             shakeCoroutine = null;
         }
     }

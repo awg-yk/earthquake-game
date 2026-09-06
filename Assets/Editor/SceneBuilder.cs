@@ -262,13 +262,18 @@ public static class SceneBuilder
         return CreateTextAnchored(parent, name, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), x, y, w, h, fontSize, content);
     }
 
+    // Legacy Text at small point sizes reads as crushed/blurry once the
+    // canvas is scaled to non-reference resolutions. Bump every requested
+    // size up uniformly rather than hand-tuning each call site.
+    private const float FontSizeMultiplier = 1.35f;
+
     private static Text CreateTextAnchored(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h, int fontSize, string content)
     {
         GameObject obj = new GameObject(name);
         SetupRectAnchored(obj, parent, anchor, pivot, x, y, w, h);
         Text text = obj.AddComponent<Text>();
         text.font = GetDefaultFont();
-        text.fontSize = fontSize;
+        text.fontSize = Mathf.RoundToInt(fontSize * FontSizeMultiplier);
         text.text = content;
         text.color = Color.black;
         text.alignment = TextAnchor.UpperLeft;
@@ -346,16 +351,16 @@ public static class SceneBuilder
         // Placed below the intensity map panel (which now sits at the very
         // top-right, see CreateIntensityMapPanel) so the two never overlap.
         GameObject container = new GameObject("ButtonContainer");
-        SetupRectAnchored(container, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -260, 460, 300);
+        SetupRectAnchored(container, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -260, 150, 300);
 
         GridLayoutGroup grid = container.AddComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(110, 36);
-        grid.spacing = new Vector2(6, 6);
+        grid.cellSize = new Vector2(150, 36);
+        grid.spacing = new Vector2(0, 6);
         grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
         grid.startAxis = GridLayoutGroup.Axis.Horizontal;
         grid.childAlignment = TextAnchor.UpperLeft;
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        grid.constraintCount = 4;
+        grid.constraintCount = 1; // single vertical column: current prefecture on top, reachable ones below
 
         return container;
     }

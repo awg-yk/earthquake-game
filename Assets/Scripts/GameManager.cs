@@ -39,9 +39,6 @@ namespace EarthquakeGame
         [Tooltip("Length of one round, in in-game days.")]
         public int daysPerRound = 360;
 
-        [Tooltip("The fortune teller gives a fresh precise forecast every this many days.")]
-        public int forecastIntervalDays = 10;
-
         [Tooltip("Minimum felt intensity rank (3 = shindo 3) that actually shakes the tower - matches the real-world threshold where people notice shaking.")]
         public int minFeltRankToShake = 2;
 
@@ -101,6 +98,8 @@ namespace EarthquakeGame
         {
             if (isRoundOver || blockTowerManager == null || Camera.main == null) return;
 
+            FollowTowerHeight();
+
             float distanceFromCamera = Camera.main.transform.position.z * -1f;
             Vector3 screenPos = Input.mousePosition;
             Vector3 worldPos = Camera.main.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, distanceFromCamera));
@@ -150,7 +149,7 @@ namespace EarthquakeGame
             if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
             if (intensityMapView != null) intensityMapView.ClearAll();
 
-            currentForecast = fortuneTeller != null ? fortuneTeller.GetPeriodicForecast(currentDate) : "";
+            currentForecast = fortuneTeller != null ? fortuneTeller.GetMonthlyForecast(currentDate) : "";
             PlayFortuneAnimation();
 
             if (mapManager != null)
@@ -197,6 +196,22 @@ namespace EarthquakeGame
 
             Color color = new Color(0.85f, 0.45f, 0.4f, 0.6f);
             ShapeMeshFactory.Apply(shapePreview, selectedSize, color, addCollider: false);
+        }
+
+        // Zooms out and pans up as the tower grows, so tall towers never
+        // scroll out of view above the camera's default frame.
+        private void FollowTowerHeight()
+        {
+            Camera cam = Camera.main;
+            float top = blockTowerManager.CurrentHeight; // above the base, base is at world Y ~ 0
+            float desiredHalfHeight = Mathf.Max(6f, (top + 3f) * 0.5f + 1f);
+            float desiredCenterY = Mathf.Max(3f, top * 0.5f + 1f);
+
+            cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, desiredHalfHeight, Time.deltaTime * 2f);
+
+            Vector3 pos = cam.transform.position;
+            pos.y = Mathf.Lerp(pos.y, desiredCenterY, Time.deltaTime * 2f);
+            cam.transform.position = pos;
         }
 
         // Called by MapManager when a prefecture button is clicked.
@@ -270,9 +285,9 @@ namespace EarthquakeGame
 
             playerManager.AdvanceOneDay();
 
-            if (fortuneTeller != null && forecastIntervalDays > 0 && survivalDays % forecastIntervalDays == 0)
+            if (fortuneTeller != null && currentDate.Day == 1)
             {
-                currentForecast = fortuneTeller.GetPeriodicForecast(currentDate);
+                currentForecast = fortuneTeller.GetMonthlyForecast(currentDate);
                 PlayFortuneAnimation();
             }
 
@@ -330,6 +345,10 @@ namespace EarthquakeGame
             fortuneAnimationPanel.SetActive(true);
             if (fortuneAnimationText != null) fortuneAnimationText.text = currentForecast;
             if (fortuneChimePlayer != null) fortuneChimePlayer.PlayChime();
+            if (intensityMapView != null && fortuneTeller != null)
+            {
+                intensityMapView.SetIntensities(fortuneTeller.LastForecastIntensities);
+            }
 
             float elapsed = 0f;
             while (elapsed < fortuneAnimationDuration)
@@ -347,6 +366,7 @@ namespace EarthquakeGame
             }
 
             fortuneAnimationPanel.SetActive(false);
+            if (intensityMapView != null) intensityMapView.ClearAll();
             fortuneAnimationCoroutine = null;
         }
 

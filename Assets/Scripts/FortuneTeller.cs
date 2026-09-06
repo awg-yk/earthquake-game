@@ -1,35 +1,38 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace EarthquakeGame
 {
     // The in-game "fortune teller" (占い師). Not real earthquake prediction,
-    // but here it's deliberately confident and precise (not vague) - every
-    // forecastIntervalDays it peeks at future earthquake data and names the
-    // exact prefecture, timing and intensity of the next big one (shindo 5
-    // or stronger) within the following forecastWindowDays, anywhere in
-    // Japan. This gives the player a real choice: move toward it for a
-    // shot at a big score multiplier, or stay well away from it.
+    // but here it's deliberately confident and precise (not vague): on the
+    // 1st of every month, it peeks at that entire month's future earthquake
+    // data and names every prefecture that will feel shindo 2 or stronger
+    // at some point during the month - shown directly on the intensity map.
     public class FortuneTeller : MonoBehaviour
     {
         public EarthquakeManager earthquakeManager;
 
-        [Tooltip("How many days ahead the forecast looks.")]
-        public int forecastWindowDays = 10;
+        [Tooltip("Minimum shindo (2 = shindo 2) the monthly forecast bothers marking on the map.")]
+        public int minRank = 2;
 
-        [Tooltip("Minimum shindo (5=5弱) the forecast bothers announcing.")]
-        public int minRank = 5;
+        public string LastForecastMessage { get; private set; } = "";
+        public Dictionary<string, string> LastForecastIntensities { get; private set; } = new Dictionary<string, string>();
 
-        public string GetPeriodicForecast(DateTime currentDate)
+        // Called on the 1st of every in-game month. Scans the whole month
+        // for every prefecture that will feel shindo >= minRank at least
+        // once, and builds both a text summary and a map-ready dictionary.
+        public string GetMonthlyForecast(DateTime currentDate)
         {
-            var result = earthquakeManager.FindNextBigQuake(currentDate, forecastWindowDays, minRank);
-            if (result == null)
-            {
-                return $"占い師：今後{forecastWindowDays}日間、大きな地震（震度5弱以上）の心配はなさそうです。";
-            }
+            var map = earthquakeManager.GetPrefecturesWithQuakesInMonth(currentDate.Year, currentDate.Month, minRank);
+            LastForecastIntensities = map;
 
-            var (daysUntil, prefecture, intensity) = result.Value;
-            return $"占い師：{daysUntil}日後、{prefecture}で震度{intensity}の地震が起きるでしょう。";
+            LastForecastMessage = map.Count > 0
+                ? $"占い師：{currentDate.Month}月は{string.Join("、", map.Keys.OrderByDescending(p => IntensityScale.ToRank(map[p])))}で震度2以上の揺れがあるでしょう。"
+                : $"占い師：{currentDate.Month}月は大きな揺れはなさそうです。";
+
+            return LastForecastMessage;
         }
     }
 }
