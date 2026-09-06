@@ -1,46 +1,22 @@
 namespace EarthquakeGame
 {
+    // Only rectangles now (squares are just the elongation=1 case) - see
+    // BlockTowerManager.PlaceBlock, which randomizes each block's aspect
+    // ratio (long-and-thin vs. short-and-wide) for stacking variety.
     public enum BlockShape
     {
-        Square,
-        Triangle,
-        Circle
+        Rectangle
     }
 
-    // Fewer corners = harder to balance = worth more points if it survives.
     public static class BlockShapeInfo
     {
-        public static int GetCorners(BlockShape shape)
-        {
-            switch (shape)
-            {
-                case BlockShape.Square: return 4;
-                case BlockShape.Triangle: return 3;
-                case BlockShape.Circle: return 0;
-                default: return 4;
-            }
-        }
+        // Flat base score - shape no longer varies, so there's nothing to
+        // differentiate here anymore. The block-survives-a-big-shake
+        // multiplier (Block.ApplySurvivedShindo) is the main scoring lever.
+        public const int BaseScore = 5;
 
-        public static int GetScore(BlockShape shape)
-        {
-            switch (shape)
-            {
-                case BlockShape.Square: return 3;
-                case BlockShape.Triangle: return 6;
-                case BlockShape.Circle: return 10;
-                default: return 0;
-            }
-        }
+        public static int GetScore(BlockShape shape) => BaseScore;
 
-        public static string GetLabel(BlockShape shape)
-        {
-            switch (shape)
-            {
-                case BlockShape.Square: return "四角";
-                case BlockShape.Triangle: return "三角";
-                case BlockShape.Circle: return "丸";
-                default: return shape.ToString();
-            }
-        }
+        public static string GetLabel(BlockShape shape) => "長方形";
     }
 }

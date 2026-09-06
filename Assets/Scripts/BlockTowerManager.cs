@@ -16,6 +16,13 @@ namespace EarthquakeGame
         [Header("Block settings")]
         public float blockSize = 0.6f;
         public float spawnHeightMargin = 1.5f;
+        [Tooltip("Range of random elongation applied to each block's rectangle (area stays constant: width = blockSize*elongation, height = blockSize/elongation).")]
+        public float minElongation = 0.6f;
+        public float maxElongation = 1.8f;
+
+        // Highest the tower has ever reached above the base, tracked for the round-end height record.
+        private float maxHeightReached;
+        public float MaxHeightReached => maxHeightReached;
 
         [Header("Shake settings")]
         [Tooltip("Screen/world units of shake amplitude per intensity rank point.")]
@@ -45,34 +52,40 @@ namespace EarthquakeGame
         public float GetNextSpawnY() => GetCurrentTowerTopY() + spawnHeightMargin;
 
         // Keeps a placement X position within the base platform's bounds.
+        // Uses the widest a block can ever be (fully elongated) as the
+        // safety margin so an elongated block never hangs off the edge.
         public float ClampX(float xPosition)
         {
-            return Mathf.Clamp(xPosition, -baseHalfWidth + blockSize * 0.5f, baseHalfWidth - blockSize * 0.5f);
+            float margin = blockSize * maxElongation * 0.5f;
+            return Mathf.Clamp(xPosition, -baseHalfWidth + margin, baseHalfWidth - margin);
         }
 
-        public Block PlaceBlock(BlockShape shape, float xPosition, float rotationDegrees = 0f)
+        // Picks a random elongation for the next block, exposed so the
+        // preview (GameManager) can show the exact same rectangle the
+        // player is about to drop.
+        public Vector2 RollRandomSize()
+        {
+            float elongation = Random.Range(minElongation, maxElongation);
+            return new Vector2(blockSize * elongation, blockSize / elongation);
+        }
+
+        public Block PlaceBlock(Vector2 size, float xPosition, float rotationDegrees = 0f)
         {
             xPosition = ClampX(xPosition);
             float spawnY = GetCurrentTowerTopY() + spawnHeightMargin;
 
-            GameObject obj = new GameObject($"Block_{shape}");
+            GameObject obj = new GameObject("Block_Rectangle");
             obj.transform.position = new Vector3(xPosition, spawnY, 0);
             obj.transform.rotation = Quaternion.Euler(0, 0, rotationDegrees);
 
-            Color color = shape switch
-            {
-                BlockShape.Square => new Color(0.85f, 0.4f, 0.4f),
-                BlockShape.Triangle => new Color(0.4f, 0.75f, 0.85f),
-                BlockShape.Circle => new Color(0.9f, 0.8f, 0.3f),
-                _ => Color.white
-            };
-            ShapeMeshFactory.Apply(obj, shape, blockSize, color);
+            Color color = new Color(0.85f, 0.45f, 0.4f);
+            ShapeMeshFactory.Apply(obj, size, color);
 
             var rb = obj.AddComponent<Rigidbody2D>();
             rb.mass = 1f;
 
             var block = obj.AddComponent<Block>();
-            block.Setup(shape);
+            block.Setup(BlockShape.Rectangle);
 
             aliveBlocks.Add(block);
             return block;
@@ -88,7 +101,10 @@ namespace EarthquakeGame
             foreach (var block in aliveBlocks)
             {
                 if (block == null) continue;
-                float top = block.transform.position.y + blockSize * 0.5f;
+                // Use the collider's world bounds (not a fixed blockSize)
+                // since blocks now have randomized, rotated rectangles.
+                var collider = block.GetComponent<Collider2D>();
+                float top = collider != null ? collider.bounds.max.y : block.transform.position.y;
                 if (top > highest) highest = top;
             }
             return highest;
@@ -151,6 +167,10 @@ namespace EarthquakeGame
                     if (block != null) Destroy(block.gameObject);
                 }
             }
+
+            float baseTop = baseRigidbody != null ? baseRigidbody.transform.position.y + 0.15f : 0f;
+            float currentHeight = GetCurrentTowerTopY() - baseTop;
+            if (currentHeight > maxHeightReached) maxHeightReached = currentHeight;
         }
 
         public int GetScore()
@@ -170,6 +190,7 @@ namespace EarthquakeGame
                 if (block != null) Destroy(block.gameObject);
             }
             aliveBlocks.Clear();
+            maxHeightReached = 0f;
         }
     }
 }

@@ -28,6 +28,7 @@ namespace EarthquakeGame
         public CameraShaker cameraShaker;
         public EarthquakeSoundPlayer earthquakeSoundPlayer;
         public FortuneChimePlayer fortuneChimePlayer;
+        public BGMPlayer bgmPlayer;
 
         [Header("Config")]
         [Tooltip("Each new game starts on January 1st of a random year in this range, so different playthroughs sample different real earthquakes.")]
@@ -69,7 +70,7 @@ namespace EarthquakeGame
         private DateTime currentDate;
         private int survivalDays;
         private bool isRoundOver;
-        private BlockShape selectedShape = BlockShape.Square;
+        private Vector2 selectedSize = Vector2.one;
         private float selectedRotation = 0f;
         private Coroutine earthquakeAlertCoroutine;
         private Coroutine fortuneAnimationCoroutine;
@@ -79,6 +80,7 @@ namespace EarthquakeGame
         {
             StartNewGame();
             if (titleScreenPanel != null) titleScreenPanel.SetActive(true);
+            if (bgmPlayer != null) bgmPlayer.Play();
         }
 
         // Called by the title screen's "スタート" button.
@@ -118,7 +120,7 @@ namespace EarthquakeGame
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
             if (!overUI && Input.GetMouseButtonDown(0))
             {
-                blockTowerManager.PlaceBlock(selectedShape, x, selectedRotation);
+                blockTowerManager.PlaceBlock(selectedSize, x, selectedRotation);
                 AdvanceDay();
                 PickNextShape();
             }
@@ -154,19 +156,17 @@ namespace EarthquakeGame
             RefreshUI(null);
         }
 
-        // Picks a new random shape for the next block (the player doesn't
-        // choose the shape anymore - only its rotation and drop position).
+        // Picks a random elongation for the next block (the player no
+        // longer chooses a shape - only its rotation and drop position).
         private void PickNextShape()
         {
-            selectedShape = (BlockShape)UnityEngine.Random.Range(0, 3);
+            selectedSize = blockTowerManager != null ? blockTowerManager.RollRandomSize() : Vector2.one * 0.6f;
             selectedRotation = 0f;
             RebuildShapePreview();
 
             if (nextShapeInfoText != null)
             {
-                string label = BlockShapeInfo.GetLabel(selectedShape);
-                int score = BlockShapeInfo.GetScore(selectedShape);
-                nextShapeInfoText.text = $"次の形：{label}（{score}点）";
+                nextShapeInfoText.text = $"次のブロック（{BlockShapeInfo.GetScore(BlockShape.Rectangle)}点）";
             }
         }
 
@@ -190,14 +190,8 @@ namespace EarthquakeGame
                 DestroyImmediate(comp);
             }
 
-            Color color = selectedShape switch
-            {
-                BlockShape.Square => new Color(0.85f, 0.4f, 0.4f, 0.6f),
-                BlockShape.Triangle => new Color(0.4f, 0.75f, 0.85f, 0.6f),
-                BlockShape.Circle => new Color(0.9f, 0.8f, 0.3f, 0.6f),
-                _ => new Color(1f, 1f, 1f, 0.6f)
-            };
-            ShapeMeshFactory.Apply(shapePreview, selectedShape, 0.6f, color, addCollider: false);
+            Color color = new Color(0.85f, 0.45f, 0.4f, 0.6f);
+            ShapeMeshFactory.Apply(shapePreview, selectedSize, color, addCollider: false);
         }
 
         // Called by MapManager when a prefecture button is clicked.
@@ -347,10 +341,12 @@ namespace EarthquakeGame
             isRoundOver = true;
             int finalScore = blockTowerManager != null ? blockTowerManager.GetScore() : 0;
 
+            float maxHeight = blockTowerManager != null ? blockTowerManager.MaxHeightReached : 0f;
+
             if (roundEndPanel != null) roundEndPanel.SetActive(true);
             if (roundEndScoreText != null)
             {
-                roundEndScoreText.text = $"1年間、生き延びました。\n最終スコア：{finalScore}点\n残った積み木：{(blockTowerManager != null ? blockTowerManager.AliveBlockCount : 0)}個";
+                roundEndScoreText.text = $"1年間、生き延びました。\n最終スコア：{finalScore}点\n残った積み木：{(blockTowerManager != null ? blockTowerManager.AliveBlockCount : 0)}個\n最高到達高さ：{maxHeight:0.0}m";
             }
         }
 
@@ -379,6 +375,11 @@ namespace EarthquakeGame
                 mapManager.Refresh(playerManager.CurrentPrefecture,
                     playerManager.GetNeighbors(playerManager.CurrentPrefecture),
                     playerManager.CanMoveNow);
+            }
+
+            if (intensityMapView != null)
+            {
+                intensityMapView.SetPlayerPosition(playerManager.CurrentPrefecture);
             }
 
             if (fortuneText != null)

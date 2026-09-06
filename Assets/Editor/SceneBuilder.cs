@@ -44,7 +44,7 @@ public static class SceneBuilder
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
 
         // --- Block placement: shape is random, player only rotates + aims ---
-        Text nextShapeInfoText = CreateText(canvas.transform, "NextShapeInfoText", 230, -260, 380, 30, 18, "次の形：□（3点）");
+        Text nextShapeInfoText = CreateText(canvas.transform, "NextShapeInfoText", 230, -260, 380, 30, 18, "次のブロック");
         nextShapeInfoText.alignment = TextAnchor.MiddleCenter;
         Button rotateLeftButton = CreateButton(canvas.transform, "RotateLeftButton", 140, -300, 90, 50, "⟲");
         Button rotateRightButton = CreateButton(canvas.transform, "RotateRightButton", 320, -300, 90, 50, "⟳");
@@ -105,6 +105,7 @@ public static class SceneBuilder
         gameManager.cameraShaker = mainCamera.GetComponent<CameraShaker>();
         gameManager.earthquakeSoundPlayer = mainCamera.GetComponent<EarthquakeSoundPlayer>();
         gameManager.fortuneChimePlayer = mainCamera.GetComponent<FortuneChimePlayer>();
+        gameManager.bgmPlayer = mainCamera.GetComponent<BGMPlayer>();
         gameManager.earthquakeAlertText = earthquakeAlertText;
         gameManager.intensityMapView = intensityMapView;
         gameManager.titleScreenPanel = titleScreenPanel;
@@ -145,6 +146,7 @@ public static class SceneBuilder
         camObj.AddComponent<CameraShaker>();
         camObj.AddComponent<EarthquakeSoundPlayer>();
         camObj.AddComponent<FortuneChimePlayer>();
+        camObj.AddComponent<BGMPlayer>();
         return cam;
     }
 
@@ -162,7 +164,7 @@ public static class SceneBuilder
     {
         GameObject obj = new GameObject("BasePlatform");
         obj.transform.position = new Vector3(0, 0, 0);
-        ShapeMeshFactory.Apply(obj, BlockShape.Square, 1f, new Color(0.5f, 0.4f, 0.3f));
+        ShapeMeshFactory.Apply(obj, new Vector2(1f, 1f), new Color(0.5f, 0.4f, 0.3f));
         obj.transform.localScale = new Vector3(8f, 0.3f, 1f);
 
         // Re-fit the collider to the platform's actual scaled size instead

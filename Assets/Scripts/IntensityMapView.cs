@@ -17,11 +17,14 @@ namespace EarthquakeGame
         public RectTransform mapArea;
 
         public string shapesResourcePath = "Data/prefecture_shapes";
+        public string prefecturesResourcePath = "Data/prefectures";
         public Color defaultColor = new Color(0.75f, 0.78f, 0.72f);
         public Color seaColor = new Color(0.72f, 0.83f, 0.92f);
         public Color outlineColor = new Color(0.35f, 0.4f, 0.35f);
 
         private readonly Dictionary<string, UIPolygon> prefecturePolygons = new Dictionary<string, UIPolygon>();
+        private readonly Dictionary<string, Vector2> prefectureCentroids = new Dictionary<string, Vector2>();
+        private RectTransform playerMarker;
 
         // Roughly covers mainland Japan (Hokkaido to Kyushu).
         private const float LatMin = 30.5f, LatMax = 45.7f;
@@ -31,6 +34,8 @@ namespace EarthquakeGame
         {
             BuildSea();
             BuildPrefectureShapes();
+            LoadPrefectureCentroids();
+            BuildPlayerMarker();
         }
 
         private Vector2 Project(float lon, float lat)
@@ -127,6 +132,64 @@ namespace EarthquakeGame
             {
                 kv.Value.color = defaultColor;
             }
+        }
+
+        private void LoadPrefectureCentroids()
+        {
+            TextAsset json = Resources.Load<TextAsset>(prefecturesResourcePath);
+            if (json == null)
+            {
+                Debug.LogError($"IntensityMapView: could not find Resources/{prefecturesResourcePath}.json");
+                return;
+            }
+
+            var root = MiniJson.Deserialize(json.text) as Dictionary<string, object>;
+            var list = (List<object>)root["prefectures"];
+            foreach (var entryObj in list)
+            {
+                var entry = (Dictionary<string, object>)entryObj;
+                string name = (string)entry["name"];
+                float lat = entry.TryGetValue("lat", out var la) ? (float)Convert.ToDouble(la) : 0f;
+                float lon = entry.TryGetValue("lon", out var lo) ? (float)Convert.ToDouble(lo) : 0f;
+                prefectureCentroids[name] = Project(lon, lat);
+            }
+        }
+
+        private void BuildPlayerMarker()
+        {
+            GameObject obj = new GameObject("PlayerMarker");
+            var rt = obj.AddComponent<RectTransform>();
+            rt.SetParent(mapArea, false);
+            rt.sizeDelta = new Vector2(24, 24);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+
+            var text = obj.AddComponent<Text>();
+            text.text = "×";
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.fontSize = 20;
+            text.fontStyle = FontStyle.Bold;
+            text.color = new Color(0.9f, 0.05f, 0.75f);
+            text.alignment = TextAnchor.MiddleCenter;
+
+            playerMarker = rt;
+            playerMarker.gameObject.SetActive(false);
+        }
+
+        // Marks the player's current prefecture with a bold "×" so they can
+        // always see where they are on the map, independent of any
+        // earthquake intensity coloring.
+        public void SetPlayerPosition(string prefectureName)
+        {
+            if (playerMarker == null) return;
+            if (!prefectureCentroids.TryGetValue(prefectureName, out var pos))
+            {
+                playerMarker.gameObject.SetActive(false);
+                return;
+            }
+            playerMarker.anchoredPosition = pos;
+            playerMarker.gameObject.SetActive(true);
+            playerMarker.SetAsLastSibling();
         }
     }
 }
