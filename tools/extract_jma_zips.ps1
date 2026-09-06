@@ -1,15 +1,16 @@
-# Extracts every yearly zip file (i1919.zip ... i2022.zip) from the JMA
-# 震度データベース download into a single "extracted" folder, so all the
-# resulting .dat files can be combined and fed to convert_jma_dat.py.
+# Extracts every yearly zip file from the JMA shindo database download
+# into a single destination folder, so the resulting .dat files can be
+# combined and fed to convert_jma_dat.py.
 #
-# Usage (from PowerShell):
-#   powershell -ExecutionPolicy Bypass -File tools\extract_jma_zips.ps1 `
-#       -SourceFolder "$env:USERPROFILE\Desktop\地震" `
-#       -DestinationFolder "$env:USERPROFILE\Desktop\地震\extracted"
+# Usage (from PowerShell), passing the actual folder paths yourself:
+#   powershell -ExecutionPolicy Bypass -File tools\extract_jma_zips.ps1 -SourceFolder "C:\path\to\zips" -DestinationFolder "C:\path\to\extracted"
 
 param(
-    [string]$SourceFolder = "$env:USERPROFILE\Desktop\地震",
-    [string]$DestinationFolder = "$env:USERPROFILE\Desktop\地震\extracted"
+    [Parameter(Mandatory=$true)]
+    [string]$SourceFolder,
+
+    [Parameter(Mandatory=$true)]
+    [string]$DestinationFolder
 )
 
 if (-not (Test-Path $DestinationFolder)) {
@@ -19,7 +20,7 @@ if (-not (Test-Path $DestinationFolder)) {
 $zipFiles = Get-ChildItem -Path $SourceFolder -Filter "*.zip"
 
 if ($zipFiles.Count -eq 0) {
-    Write-Host "No .zip files found in $SourceFolder"
+    Write-Host "No zip files found in $SourceFolder"
     exit 1
 }
 
