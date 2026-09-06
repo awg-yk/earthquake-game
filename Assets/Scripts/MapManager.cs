@@ -16,9 +16,7 @@ namespace EarthquakeGame
         [Tooltip("Parent transform (e.g. a Grid Layout Group) that buttons are instantiated under.")]
         public Transform buttonContainer;
 
-        public Color currentColor = new Color(1f, 0.6f, 0.2f); // orange
         public Color reachableColor = new Color(0.6f, 1f, 0.6f); // light green
-        public Color notYetReachableColor = new Color(0.75f, 0.75f, 0.75f); // gray
 
         private GameManager gameManager;
 
@@ -36,31 +34,31 @@ namespace EarthquakeGame
                 Destroy(child.gameObject);
             }
 
-            // Current location isn't something the player can "move to", so
-            // it no longer gets its own button - only actual destinations do.
+            // Only shown once movement actually becomes available, instead
+            // of always displaying a list of not-yet-reachable prefectures.
+            buttonContainer.gameObject.SetActive(canMove);
+            if (!canMove) return;
+
             foreach (var neighbor in neighbors)
             {
-                CreateButton(neighbor, canMove ? reachableColor : notYetReachableColor, canMove);
+                CreateButton(neighbor);
             }
         }
 
-        private void CreateButton(string prefectureName, Color color, bool interactable)
+        private void CreateButton(string prefectureName)
         {
             Button btn = Instantiate(prefectureButtonPrefab, buttonContainer);
             btn.gameObject.SetActive(true);
-            btn.interactable = interactable;
+            btn.interactable = true;
 
             var label = btn.GetComponentInChildren<Text>();
             if (label != null) label.text = prefectureName;
 
             var image = btn.GetComponent<Image>();
-            if (image != null) image.color = color;
+            if (image != null) image.color = reachableColor;
 
-            if (interactable)
-            {
-                string captured = prefectureName;
-                btn.onClick.AddListener(() => gameManager.OnPrefectureClicked(captured));
-            }
+            string captured = prefectureName;
+            btn.onClick.AddListener(() => gameManager.OnPrefectureClicked(captured));
         }
     }
 }

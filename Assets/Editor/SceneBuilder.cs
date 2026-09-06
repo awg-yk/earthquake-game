@@ -40,12 +40,11 @@ public static class SceneBuilder
         Text countStatsText = CreateTextAnchored(canvas.transform, "CountStatsText", topLeft, topLeft, 20, -157, 380, 26, 16, "個数：現在0個／最高0個");
         Text heightStatsText = CreateTextAnchored(canvas.transform, "HeightStatsText", topLeft, topLeft, 20, -185, 380, 26, 16, "高さ：現在0.0m／最高0.0m");
         Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topLeft, topLeft, 20, -221, 380, 140, 18, "最新の地震：なし");
-        Text fortuneText = CreateTextAnchored(canvas.transform, "FortuneText", topLeft, topLeft, 20, -369, 380, 90, 16, "地震予報士：…");
 
         // Persistent left-side map showing this month's forecasted warning
         // areas (震度2以上), unlike the right-side one which only flashes
         // briefly for earthquake alerts. Placed below the HUD text column.
-        IntensityMapView forecastMapView = CreateIntensityMapPanel(canvas.transform, "ForecastMapPanel", topLeft, topLeft, 20, -470, "今月の警戒マップ");
+        IntensityMapView forecastMapView = CreateIntensityMapPanel(canvas.transform, "ForecastMapPanel", topLeft, topLeft, 20, -370, "今月の警戒マップ");
 
         GameObject buttonContainer = CreateButtonContainer(canvas.transform);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
@@ -53,8 +52,6 @@ public static class SceneBuilder
         // --- Block placement: shape is random, player only rotates + aims ---
         // The rotate buttons live in the bottom-right corner; only a short
         // "回転（Q/E）" hint is shown (not the old full instructions).
-        Text nextShapeInfoText = CreateText(canvas.transform, "NextShapeInfoText", -320, -260, 380, 30, 18, "次のブロック");
-        nextShapeInfoText.alignment = TextAnchor.MiddleCenter;
         Vector2 bottomRight = new Vector2(1f, 0f);
         Button rotateLeftButton = CreateButtonAnchored(canvas.transform, "RotateLeftButton", bottomRight, bottomRight, -190, 70, 90, 50, "⟲");
         Button rotateRightButton = CreateButtonAnchored(canvas.transform, "RotateRightButton", bottomRight, bottomRight, -90, 70, 90, 50, "⟳");
@@ -106,7 +103,6 @@ public static class SceneBuilder
         gameManager.survivalDaysText = survivalDaysText;
         gameManager.currentPrefectureText = currentPrefectureText;
         gameManager.latestEarthquakeText = latestEarthquakeText;
-        gameManager.fortuneText = fortuneText;
         gameManager.scoreText = scoreText;
         gameManager.countStatsText = countStatsText;
         gameManager.heightStatsText = heightStatsText;
@@ -122,7 +118,6 @@ public static class SceneBuilder
         gameManager.intensityMapView = intensityMapView;
         gameManager.forecastMapView = forecastMapView;
         gameManager.titleScreenPanel = titleScreenPanel;
-        gameManager.nextShapeInfoText = nextShapeInfoText;
         gameManager.fortuneAnimationPanel = fortuneAnimationPanel;
         gameManager.fortuneAnimationText = fortuneAnimationText;
         gameManager.fortuneAnimationIcon = fortuneAnimationIcon;
@@ -407,6 +402,7 @@ public static class SceneBuilder
     // light up by intensity via IntensityMapView.SetIntensities().
     private static readonly (string label, string hex)[] IntensityLegendEntries =
     {
+        ("1/2", "4CAF50"),
         ("3/4", "FFC107"),
         ("5弱/5強", "FF9800"),
         ("6弱/6強", "F44336"),
@@ -456,11 +452,11 @@ public static class SceneBuilder
         RectTransform legendRect = SetupRectAnchored(legendRow, panelTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), 0, 6, 260, 40);
 
         var grid = legendRow.AddComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(63, 36);
-        grid.spacing = new Vector2(2, 0);
+        grid.cellSize = new Vector2(50, 36);
+        grid.spacing = new Vector2(1, 0);
         grid.childAlignment = TextAnchor.MiddleCenter;
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        grid.constraintCount = 4;
+        grid.constraintCount = 5;
 
         foreach (var (label, hex) in IntensityLegendEntries)
         {
@@ -479,7 +475,7 @@ public static class SceneBuilder
             var swatchImage = swatch.AddComponent<Image>();
             if (ColorUtility.TryParseHtmlString("#" + hex, out var color)) swatchImage.color = color;
 
-            Text labelText = CreateTextAnchored(entry.transform, "Label", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -18, 62, 18, 11, label);
+            Text labelText = CreateTextAnchored(entry.transform, "Label", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -18, 50, 18, 10, label);
             labelText.alignment = TextAnchor.UpperCenter;
             labelText.color = Color.black;
         }

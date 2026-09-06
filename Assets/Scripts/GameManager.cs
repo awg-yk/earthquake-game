@@ -47,7 +47,6 @@ namespace EarthquakeGame
         public Text survivalDaysText;
         public Text currentPrefectureText;
         public Text latestEarthquakeText;
-        public Text fortuneText;
         public Text scoreText;
         public Text heightStatsText;
         public Text countStatsText;
@@ -62,7 +61,6 @@ namespace EarthquakeGame
         public IntensityMapView forecastMapView;
         [Tooltip("How long the earthquake alert banner/intensity map stays visible, in seconds.")]
         public float earthquakeAlertDuration = 3.5f;
-        public Text nextShapeInfoText;
 
         [Header("Fortune teller animation")]
         public GameObject fortuneAnimationPanel;
@@ -137,7 +135,7 @@ namespace EarthquakeGame
             if (Input.GetKeyDown(KeyCode.E)) RotateRight();
 
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
-            if (!overUI && Input.GetMouseButtonDown(0))
+            if (!overUI && Input.GetMouseButtonDown(0) && blockTowerManager.IsSettled())
             {
                 blockTowerManager.PlaceBlock(selectedSize, x, selectedRotation);
                 AdvanceDay();
@@ -188,11 +186,6 @@ namespace EarthquakeGame
             selectedSize = blockTowerManager != null ? blockTowerManager.GetBlockSize() : Vector2.one * 0.6f;
             selectedRotation = 0f;
             RebuildShapePreview();
-
-            if (nextShapeInfoText != null)
-            {
-                nextShapeInfoText.text = "次のブロック";
-            }
         }
 
         // Called by the rotate buttons (and Q/E keys).
@@ -452,11 +445,6 @@ namespace EarthquakeGame
             if (forecastMapView != null)
             {
                 forecastMapView.SetPlayerPosition(playerManager.CurrentPrefecture);
-            }
-
-            if (fortuneText != null)
-            {
-                fortuneText.text = currentForecast;
             }
 
             if (blockTowerManager != null)

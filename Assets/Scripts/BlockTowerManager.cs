@@ -56,11 +56,26 @@ namespace EarthquakeGame
             }
         }
 
+        [Tooltip("Below this speed (units/sec and deg/sec), the most recently dropped block counts as settled and the next one may be placed.")]
+        public float settleLinearThreshold = 0.05f;
+        public float settleAngularThreshold = 5f;
+
         private readonly List<Block> aliveBlocks = new List<Block>();
         private Vector3 basePlatformRestPosition;
         private Coroutine shakeCoroutine;
         private float maxHeightReached;
         private int maxBlockCountReached;
+        private Rigidbody2D lastPlacedRigidbody;
+
+        // The player can only drop a new block once the previous one has
+        // come to rest, so towers rise deliberately instead of blocks
+        // being stacked mid-fall.
+        public bool IsSettled()
+        {
+            if (lastPlacedRigidbody == null) return true;
+            return lastPlacedRigidbody.velocity.sqrMagnitude < settleLinearThreshold * settleLinearThreshold
+                && Mathf.Abs(lastPlacedRigidbody.angularVelocity) < settleAngularThreshold;
+        }
 
         void Awake()
         {
@@ -113,6 +128,7 @@ namespace EarthquakeGame
             var block = obj.AddComponent<Block>();
             block.Setup(BlockShape.Rectangle);
 
+            lastPlacedRigidbody = rb;
             aliveBlocks.Add(block);
             if (aliveBlocks.Count > maxBlockCountReached) maxBlockCountReached = aliveBlocks.Count;
             return block;
@@ -198,6 +214,7 @@ namespace EarthquakeGame
             aliveBlocks.Clear();
             maxHeightReached = 0f;
             maxBlockCountReached = 0;
+            lastPlacedRigidbody = null;
         }
     }
 }
