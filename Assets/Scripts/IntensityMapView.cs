@@ -5,73 +5,32 @@ using UnityEngine.UI;
 
 namespace EarthquakeGame
 {
-    // A schematic "map" of Japan: a few simplified landmass silhouettes
-    // (Hokkaido / Honshu / Shikoku / Kyushu, hand-approximated - not real
-    // survey data) drawn as filled UI polygons, with one small marker per
-    // prefecture positioned by projecting its real lat/lon onto the same
-    // panel. No map image asset is used. Markers light up by intensity
-    // when an earthquake hits.
+    // A schematic but geographically real "map" of Japan: each prefecture
+    // is drawn as its own filled polygon (simplified from actual public
+    // boundary data, see tools/ for the source), positioned by projecting
+    // real lon/lat onto a fixed-size panel. No map image asset is used -
+    // every shape is generated at runtime. Prefectures light up by
+    // intensity when an earthquake hits.
     public class IntensityMapView : MonoBehaviour
     {
-        [Tooltip("Fixed-size panel the landmass and markers are positioned within.")]
+        [Tooltip("Fixed-size panel the map is drawn within.")]
         public RectTransform mapArea;
 
-        public string dataResourcePath = "Data/prefectures";
-        public float markerSize = 11f;
-        public Color defaultColor = new Color(0.8f, 0.8f, 0.82f);
-        public Color landColor = new Color(0.62f, 0.78f, 0.6f);
+        public string shapesResourcePath = "Data/prefecture_shapes";
+        public Color defaultColor = new Color(0.75f, 0.78f, 0.72f);
         public Color seaColor = new Color(0.72f, 0.83f, 0.92f);
+        public Color outlineColor = new Color(0.35f, 0.4f, 0.35f);
 
-        private readonly Dictionary<string, Image> markers = new Dictionary<string, Image>();
+        private readonly Dictionary<string, UIPolygon> prefecturePolygons = new Dictionary<string, UIPolygon>();
 
         // Roughly covers mainland Japan (Hokkaido to Kyushu).
         private const float LatMin = 30.5f, LatMax = 45.7f;
         private const float LonMin = 129f, LonMax = 145.8f;
 
-        // Hand-simplified island outlines as (longitude, latitude) points.
-        // These are rough approximations for a schematic map, not survey data.
-        private static readonly float[][] HokkaidoOutline =
-        {
-            new[] { 141.0f, 45.5f }, new[] { 143.2f, 44.4f }, new[] { 145.3f, 43.6f },
-            new[] { 145.0f, 42.9f }, new[] { 144.0f, 42.0f }, new[] { 142.4f, 41.5f },
-            new[] { 140.4f, 41.7f }, new[] { 139.8f, 42.8f }, new[] { 140.0f, 44.2f },
-            new[] { 140.3f, 45.2f },
-        };
-
-        private static readonly float[][] HonshuOutline =
-        {
-            new[] { 140.9f, 41.5f }, new[] { 141.9f, 40.6f }, new[] { 141.6f, 39.4f },
-            new[] { 141.9f, 38.3f }, new[] { 140.9f, 37.3f }, new[] { 140.7f, 36.2f },
-            new[] { 140.9f, 35.7f }, new[] { 139.9f, 35.2f }, new[] { 138.9f, 34.6f },
-            new[] { 137.6f, 34.6f }, new[] { 136.9f, 34.6f }, new[] { 135.4f, 33.5f },
-            new[] { 133.6f, 33.5f }, new[] { 131.5f, 34.0f }, new[] { 131.5f, 34.6f },
-            new[] { 132.5f, 35.5f }, new[] { 134.2f, 35.5f }, new[] { 135.8f, 35.6f },
-            new[] { 137.0f, 36.8f }, new[] { 137.4f, 37.4f }, new[] { 138.6f, 37.9f },
-            new[] { 139.9f, 39.2f }, new[] { 140.0f, 40.0f }, new[] { 140.3f, 40.8f },
-        };
-
-        private static readonly float[][] ShikokuOutline =
-        {
-            new[] { 132.4f, 33.9f }, new[] { 132.9f, 34.3f }, new[] { 133.9f, 34.2f },
-            new[] { 134.7f, 34.2f }, new[] { 134.6f, 33.7f }, new[] { 133.3f, 33.2f },
-            new[] { 132.5f, 33.4f },
-        };
-
-        private static readonly float[][] KyushuOutline =
-        {
-            new[] { 130.0f, 34.0f }, new[] { 131.2f, 33.9f }, new[] { 131.9f, 33.5f },
-            new[] { 131.7f, 32.4f }, new[] { 131.0f, 31.2f }, new[] { 130.5f, 31.0f },
-            new[] { 129.7f, 31.4f }, new[] { 129.4f, 32.7f }, new[] { 129.9f, 33.3f },
-        };
-
         void Awake()
         {
             BuildSea();
-            BuildLandmass(HokkaidoOutline);
-            BuildLandmass(HonshuOutline);
-            BuildLandmass(ShikokuOutline);
-            BuildLandmass(KyushuOutline);
-            BuildMarkers();
+            BuildPrefectureShapes();
         }
 
         private Vector2 Project(float lon, float lat)
@@ -96,9 +55,42 @@ namespace EarthquakeGame
             img.color = seaColor;
         }
 
-        private void BuildLandmass(float[][] outline)
+        private void BuildPrefectureShapes()
         {
-            GameObject obj = new GameObject("Landmass");
+            if (mapArea == null) return;
+
+            TextAsset json = Resources.Load<TextAsset>(shapesResourcePath);
+            if (json == null)
+            {
+                Debug.LogError($"IntensityMapView: could not find Resources/{shapesResourcePath}.json");
+                return;
+            }
+
+            var root = MiniJson.Deserialize(json.text) as Dictionary<string, object>;
+            var list = (List<object>)root["shapes"];
+
+            foreach (var entryObj in list)
+            {
+                var entry = (Dictionary<string, object>)entryObj;
+                string name = (string)entry["name"];
+                var pointsRaw = (List<object>)entry["points"];
+
+                var points = new List<Vector2>(pointsRaw.Count);
+                foreach (var pRaw in pointsRaw)
+                {
+                    var pair = (List<object>)pRaw;
+                    float lon = (float)Convert.ToDouble(pair[0]);
+                    float lat = (float)Convert.ToDouble(pair[1]);
+                    points.Add(Project(lon, lat));
+                }
+
+                CreatePrefectureShape(name, points);
+            }
+        }
+
+        private void CreatePrefectureShape(string prefectureName, List<Vector2> points)
+        {
+            GameObject obj = new GameObject($"Pref_{prefectureName}");
             RectTransform rt = obj.AddComponent<RectTransform>();
             rt.SetParent(mapArea, false);
             rt.anchorMin = new Vector2(0.5f, 0.5f);
@@ -108,70 +100,30 @@ namespace EarthquakeGame
             rt.sizeDelta = mapArea.rect.size;
 
             var polygon = obj.AddComponent<UIPolygon>();
-            polygon.color = landColor;
-
-            var points = new List<Vector2>(outline.Length);
-            foreach (var p in outline) points.Add(Project(p[0], p[1]));
+            polygon.color = defaultColor;
             polygon.SetPoints(points);
+
+            prefecturePolygons[prefectureName] = polygon;
         }
 
-        private void BuildMarkers()
-        {
-            if (mapArea == null) return;
-
-            TextAsset json = Resources.Load<TextAsset>(dataResourcePath);
-            if (json == null)
-            {
-                Debug.LogError($"IntensityMapView: could not find Resources/{dataResourcePath}.json");
-                return;
-            }
-
-            var root = MiniJson.Deserialize(json.text) as Dictionary<string, object>;
-            var list = (List<object>)root["prefectures"];
-
-            foreach (var entryObj in list)
-            {
-                var entry = (Dictionary<string, object>)entryObj;
-                string name = (string)entry["name"];
-                float lat = entry.TryGetValue("lat", out var la) ? (float)Convert.ToDouble(la) : 0f;
-                float lon = entry.TryGetValue("lon", out var lo) ? (float)Convert.ToDouble(lo) : 0f;
-                CreateMarker(name, lat, lon);
-            }
-        }
-
-        private void CreateMarker(string prefectureName, float lat, float lon)
-        {
-            GameObject obj = new GameObject($"Marker_{prefectureName}");
-            var rt = obj.AddComponent<RectTransform>();
-            rt.SetParent(mapArea, false);
-            rt.sizeDelta = new Vector2(markerSize, markerSize);
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = Project(lon, lat);
-
-            var img = obj.AddComponent<Image>();
-            img.color = defaultColor;
-            markers[prefectureName] = img;
-        }
-
-        // Colors each affected prefecture's marker by intensity; everything
-        // else fades back to the default gray.
+        // Colors each affected prefecture's shape by intensity; everything
+        // else fades back to the default color.
         public void SetIntensities(Dictionary<string, string> intensities)
         {
             ClearAll();
             foreach (var kv in intensities)
             {
-                if (!markers.TryGetValue(kv.Key, out var img)) continue;
+                if (!prefecturePolygons.TryGetValue(kv.Key, out var polygon)) continue;
                 if (ColorUtility.TryParseHtmlString("#" + IntensityScale.GetColorHex(kv.Value), out var color))
                 {
-                    img.color = color;
+                    polygon.color = color;
                 }
             }
         }
 
         public void ClearAll()
         {
-            foreach (var kv in markers)
+            foreach (var kv in prefecturePolygons)
             {
                 kv.Value.color = defaultColor;
             }

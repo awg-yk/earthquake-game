@@ -27,6 +27,7 @@ namespace EarthquakeGame
         public BlockTowerManager blockTowerManager;
         public CameraShaker cameraShaker;
         public EarthquakeSoundPlayer earthquakeSoundPlayer;
+        public FortuneChimePlayer fortuneChimePlayer;
 
         [Header("Config")]
         [Tooltip("Each new game starts on January 1st of a random year in this range, so different playthroughs sample different real earthquakes.")]
@@ -57,12 +58,21 @@ namespace EarthquakeGame
         public IntensityMapView intensityMapView;
         [Tooltip("How long the earthquake alert banner/intensity map stays visible, in seconds.")]
         public float earthquakeAlertDuration = 3.5f;
+        public Text nextShapeInfoText;
+
+        [Header("Fortune teller animation")]
+        public GameObject fortuneAnimationPanel;
+        public Text fortuneAnimationText;
+        public Transform fortuneAnimationIcon;
+        public float fortuneAnimationDuration = 3f;
 
         private DateTime currentDate;
         private int survivalDays;
         private bool isRoundOver;
         private BlockShape selectedShape = BlockShape.Square;
+        private float selectedRotation = 0f;
         private Coroutine earthquakeAlertCoroutine;
+        private Coroutine fortuneAnimationCoroutine;
         private string currentForecast = "";
 
         void Start()
@@ -99,13 +109,18 @@ namespace EarthquakeGame
             if (shapePreview != null)
             {
                 shapePreview.transform.position = new Vector3(x, spawnY + 0.5f, -0.5f);
+                shapePreview.transform.rotation = Quaternion.Euler(0, 0, selectedRotation);
             }
+
+            if (Input.GetKeyDown(KeyCode.Q)) RotateLeft();
+            if (Input.GetKeyDown(KeyCode.E)) RotateRight();
 
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
             if (!overUI && Input.GetMouseButtonDown(0))
             {
-                blockTowerManager.PlaceBlock(selectedShape, x);
+                blockTowerManager.PlaceBlock(selectedShape, x, selectedRotation);
                 AdvanceDay();
+                PickNextShape();
             }
         }
 
@@ -118,8 +133,7 @@ namespace EarthquakeGame
             currentDate = new DateTime(year, 1, 1);
             survivalDays = 0;
             isRoundOver = false;
-            selectedShape = BlockShape.Square;
-            RebuildShapePreview();
+            PickNextShape();
 
             playerManager.StartAt(startingPrefecture);
 
@@ -130,6 +144,7 @@ namespace EarthquakeGame
             if (intensityMapView != null) intensityMapView.ClearAll();
 
             currentForecast = fortuneTeller != null ? fortuneTeller.GetPeriodicForecast(currentDate) : "";
+            PlayFortuneAnimation();
 
             if (mapManager != null)
             {
@@ -139,16 +154,25 @@ namespace EarthquakeGame
             RefreshUI(null);
         }
 
-        // Called by the shape-select buttons.
-        public void SelectSquare() => SetSelectedShape(BlockShape.Square);
-        public void SelectTriangle() => SetSelectedShape(BlockShape.Triangle);
-        public void SelectCircle() => SetSelectedShape(BlockShape.Circle);
-
-        private void SetSelectedShape(BlockShape shape)
+        // Picks a new random shape for the next block (the player doesn't
+        // choose the shape anymore - only its rotation and drop position).
+        private void PickNextShape()
         {
-            selectedShape = shape;
+            selectedShape = (BlockShape)UnityEngine.Random.Range(0, 3);
+            selectedRotation = 0f;
             RebuildShapePreview();
+
+            if (nextShapeInfoText != null)
+            {
+                string label = BlockShapeInfo.GetLabel(selectedShape);
+                int score = BlockShapeInfo.GetScore(selectedShape);
+                nextShapeInfoText.text = $"次の形：{label}（{score}点）";
+            }
         }
+
+        // Called by the rotate buttons (and Q/E keys).
+        public void RotateLeft() => selectedRotation = (selectedRotation + 15f) % 360f;
+        public void RotateRight() => selectedRotation = (selectedRotation - 15f + 360f) % 360f;
 
         // Rebuilds the translucent shape preview shown just below the drop
         // arrow, so the player can see exactly what they're about to drop
@@ -245,6 +269,7 @@ namespace EarthquakeGame
             if (fortuneTeller != null && forecastIntervalDays > 0 && survivalDays % forecastIntervalDays == 0)
             {
                 currentForecast = fortuneTeller.GetPeriodicForecast(currentDate);
+                PlayFortuneAnimation();
             }
 
             RefreshUI(playerEvent);
@@ -279,6 +304,42 @@ namespace EarthquakeGame
             if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
             if (intensityMapView != null) intensityMapView.ClearAll();
             earthquakeAlertCoroutine = null;
+        }
+
+        // A dedicated "the fortune teller has spoken" moment every
+        // forecastIntervalDays: a full-screen overlay with a spinning icon
+        // and a chime, so the forecast doesn't just quietly appear in the
+        // corner of the HUD.
+        private void PlayFortuneAnimation()
+        {
+            if (fortuneAnimationPanel == null) return;
+            if (fortuneAnimationCoroutine != null) StopCoroutine(fortuneAnimationCoroutine);
+            fortuneAnimationCoroutine = StartCoroutine(FortuneAnimationRoutine());
+        }
+
+        private IEnumerator FortuneAnimationRoutine()
+        {
+            fortuneAnimationPanel.SetActive(true);
+            if (fortuneAnimationText != null) fortuneAnimationText.text = currentForecast;
+            if (fortuneChimePlayer != null) fortuneChimePlayer.PlayChime();
+
+            float elapsed = 0f;
+            while (elapsed < fortuneAnimationDuration)
+            {
+                elapsed += Time.deltaTime;
+
+                if (fortuneAnimationIcon != null)
+                {
+                    fortuneAnimationIcon.Rotate(0, 0, 90f * Time.deltaTime);
+                    float pulse = 1f + 0.15f * Mathf.Sin(elapsed * 6f);
+                    fortuneAnimationIcon.localScale = Vector3.one * pulse;
+                }
+
+                yield return null;
+            }
+
+            fortuneAnimationPanel.SetActive(false);
+            fortuneAnimationCoroutine = null;
         }
 
         private void EndRound()

@@ -43,11 +43,12 @@ public static class SceneBuilder
         GameObject buttonContainer = CreateButtonContainer(canvas.transform);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
 
-        // --- Block shape selection (click on the tower itself to place one) ---
-        Button squareButton = CreateButton(canvas.transform, "SquareButton", 100, -300, 120, 70, "□\n3点");
-        Button triangleButton = CreateButton(canvas.transform, "TriangleButton", 230, -300, 120, 70, "△\n6点");
-        Button circleButton = CreateButton(canvas.transform, "CircleButton", 360, -300, 120, 70, "○\n10点");
-        Text placementHintText = CreateText(canvas.transform, "PlacementHintText", 230, -230, 380, 30, 16, "形を選んで、土台をクリックすると積めます");
+        // --- Block placement: shape is random, player only rotates + aims ---
+        Text nextShapeInfoText = CreateText(canvas.transform, "NextShapeInfoText", 230, -260, 380, 30, 18, "次の形：□（3点）");
+        nextShapeInfoText.alignment = TextAnchor.MiddleCenter;
+        Button rotateLeftButton = CreateButton(canvas.transform, "RotateLeftButton", 140, -300, 90, 50, "⟲");
+        Button rotateRightButton = CreateButton(canvas.transform, "RotateRightButton", 320, -300, 90, 50, "⟳");
+        Text placementHintText = CreateText(canvas.transform, "PlacementHintText", 230, -230, 380, 30, 16, "回転(Q/E)して、土台をクリックすると積めます");
         placementHintText.alignment = TextAnchor.MiddleCenter;
         Transform dropIndicator = CreateDropIndicator();
         GameObject shapePreview = new GameObject("ShapePreview");
@@ -62,6 +63,8 @@ public static class SceneBuilder
         earthquakeAlertText.gameObject.SetActive(false);
 
         IntensityMapView intensityMapView = CreateIntensityMapPanel(canvas.transform);
+
+        GameObject fortuneAnimationPanel = CreateFortuneAnimationPanel(canvas.transform, out Text fortuneAnimationText, out Transform fortuneAnimationIcon);
 
         GameObject titleScreenPanel = CreateTitleScreenPanel(canvas.transform, out Button startButton);
 
@@ -101,18 +104,22 @@ public static class SceneBuilder
         gameManager.shapePreview = shapePreview;
         gameManager.cameraShaker = mainCamera.GetComponent<CameraShaker>();
         gameManager.earthquakeSoundPlayer = mainCamera.GetComponent<EarthquakeSoundPlayer>();
+        gameManager.fortuneChimePlayer = mainCamera.GetComponent<FortuneChimePlayer>();
         gameManager.earthquakeAlertText = earthquakeAlertText;
         gameManager.intensityMapView = intensityMapView;
         gameManager.titleScreenPanel = titleScreenPanel;
+        gameManager.nextShapeInfoText = nextShapeInfoText;
+        gameManager.fortuneAnimationPanel = fortuneAnimationPanel;
+        gameManager.fortuneAnimationText = fortuneAnimationText;
+        gameManager.fortuneAnimationIcon = fortuneAnimationIcon;
 
         mapManager.prefectureButtonPrefab = prefectureButtonTemplate;
         mapManager.buttonContainer = buttonContainer.transform;
 
         fortuneTeller.earthquakeManager = earthquakeManager;
 
-        UnityEventTools.AddVoidPersistentListener(squareButton.onClick, gameManager.SelectSquare);
-        UnityEventTools.AddVoidPersistentListener(triangleButton.onClick, gameManager.SelectTriangle);
-        UnityEventTools.AddVoidPersistentListener(circleButton.onClick, gameManager.SelectCircle);
+        UnityEventTools.AddVoidPersistentListener(rotateLeftButton.onClick, gameManager.RotateLeft);
+        UnityEventTools.AddVoidPersistentListener(rotateRightButton.onClick, gameManager.RotateRight);
         UnityEventTools.AddVoidPersistentListener(restartButton.onClick, gameManager.OnRestartClicked);
         UnityEventTools.AddVoidPersistentListener(startButton.onClick, gameManager.OnStartButtonClicked);
 
@@ -137,6 +144,7 @@ public static class SceneBuilder
         camObj.AddComponent<AudioListener>();
         camObj.AddComponent<CameraShaker>();
         camObj.AddComponent<EarthquakeSoundPlayer>();
+        camObj.AddComponent<FortuneChimePlayer>();
         return cam;
     }
 
@@ -357,20 +365,57 @@ public static class SceneBuilder
     private static IntensityMapView CreateIntensityMapPanel(Transform parent)
     {
         GameObject panel = new GameObject("IntensityMapPanel");
-        RectTransform panelRect = SetupRectAnchored(panel, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -420, 280, 260);
+        RectTransform panelRect = SetupRectAnchored(panel, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -420, 300, 300);
         Image panelImage = panel.AddComponent<Image>();
         panelImage.color = new Color(0.93f, 0.93f, 0.95f);
 
-        Text label = CreateTextAnchored(panel.transform, "IntensityMapLabel", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -4, 260, 24, 14, "震度マップ");
+        Text label = CreateTextAnchored(panel.transform, "IntensityMapLabel", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -4, 280, 24, 14, "震度マップ");
         label.alignment = TextAnchor.UpperCenter;
         label.color = Color.black;
 
         GameObject mapAreaObj = new GameObject("MapArea");
-        RectTransform mapAreaRect = SetupRectAnchored(mapAreaObj, panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -12, 260, 220);
+        RectTransform mapAreaRect = SetupRectAnchored(mapAreaObj, panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -14, 280, 264);
 
         IntensityMapView view = panel.AddComponent<IntensityMapView>();
         view.mapArea = mapAreaRect;
         return view;
+    }
+
+    // A full-screen overlay that appears whenever the fortune teller has a
+    // fresh forecast, with a spinning/pulsing icon and a chime - meant to
+    // feel like a distinct "event", not just a quiet text update.
+    private static GameObject CreateFortuneAnimationPanel(Transform parent, out Text forecastText, out Transform icon)
+    {
+        GameObject panel = new GameObject("FortuneAnimationPanel");
+        SetupRect(panel, parent, 0, 0, 1280, 720);
+        Image panelImage = panel.AddComponent<Image>();
+        panelImage.color = new Color(0.05f, 0.02f, 0.12f, 0.88f);
+        panel.SetActive(false);
+
+        GameObject iconObj = new GameObject("FortuneIcon");
+        var iconRect = iconObj.AddComponent<RectTransform>();
+        iconRect.SetParent(panel.transform, false);
+        iconRect.anchorMin = new Vector2(0.5f, 0.5f);
+        iconRect.anchorMax = new Vector2(0.5f, 0.5f);
+        iconRect.pivot = new Vector2(0.5f, 0.5f);
+        iconRect.anchoredPosition = new Vector2(0, 90);
+        iconRect.sizeDelta = new Vector2(120, 120);
+        var iconImage = iconObj.AddComponent<Image>();
+        iconImage.color = new Color(0.85f, 0.7f, 0.95f);
+        // A simple diamond so the spin/pulse animation is visible without needing a sprite asset.
+        iconRect.localRotation = Quaternion.Euler(0, 0, 45f);
+        icon = iconRect;
+
+        Text title = CreateText(panel.transform, "FortuneAnimationTitle", 0, 200, 700, 50, 28, "占い師のお告げ");
+        title.alignment = TextAnchor.MiddleCenter;
+        title.color = new Color(0.9f, 0.8f, 1f);
+        title.fontStyle = FontStyle.Bold;
+
+        forecastText = CreateText(panel.transform, "FortuneAnimationForecastText", 0, -60, 800, 100, 24, "");
+        forecastText.alignment = TextAnchor.MiddleCenter;
+        forecastText.color = Color.white;
+
+        return panel;
     }
 
     // A disabled template button that MapManager.Instantiate()s from at

@@ -50,13 +50,14 @@ namespace EarthquakeGame
             return Mathf.Clamp(xPosition, -baseHalfWidth + blockSize * 0.5f, baseHalfWidth - blockSize * 0.5f);
         }
 
-        public Block PlaceBlock(BlockShape shape, float xPosition)
+        public Block PlaceBlock(BlockShape shape, float xPosition, float rotationDegrees = 0f)
         {
             xPosition = ClampX(xPosition);
             float spawnY = GetCurrentTowerTopY() + spawnHeightMargin;
 
             GameObject obj = new GameObject($"Block_{shape}");
             obj.transform.position = new Vector3(xPosition, spawnY, 0);
+            obj.transform.rotation = Quaternion.Euler(0, 0, rotationDegrees);
 
             Color color = shape switch
             {
