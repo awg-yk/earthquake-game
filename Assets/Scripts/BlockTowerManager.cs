@@ -41,9 +41,15 @@ namespace EarthquakeGame
         // showing the player a "landing here" preview before they commit.
         public float GetNextSpawnY() => GetCurrentTowerTopY() + spawnHeightMargin;
 
+        // Keeps a placement X position within the base platform's bounds.
+        public float ClampX(float xPosition)
+        {
+            return Mathf.Clamp(xPosition, -baseHalfWidth + blockSize * 0.5f, baseHalfWidth - blockSize * 0.5f);
+        }
+
         public Block PlaceBlock(BlockShape shape, float xPosition)
         {
-            xPosition = Mathf.Clamp(xPosition, -baseHalfWidth + blockSize * 0.5f, baseHalfWidth - blockSize * 0.5f);
+            xPosition = ClampX(xPosition);
             float spawnY = GetCurrentTowerTopY() + spawnHeightMargin;
 
             GameObject obj = new GameObject($"Block_{shape}");

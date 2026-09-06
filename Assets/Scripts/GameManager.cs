@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace EarthquakeGame
@@ -10,12 +12,12 @@ namespace EarthquakeGame
     // PlayerManager / EarthquakeManager / MapManager / BlockTowerManager
     // together, and drives the minimal UI.
     //
-    // There is no GAME OVER anymore. Placing a block (choosing a shape and
-    // an X position) is the player's one action per day. If an earthquake
-    // hits the player's prefecture, the block tower's base shakes instead
-    // of ending the game; blocks can topple and are lost. After one
-    // in-game year (360 days) the round ends and the score is the total
-    // of every block still standing (fewer corners = worth more).
+    // There is no GAME OVER anymore. Placing a block (choosing a shape,
+    // then clicking on the tower) is the player's one action per day. If an
+    // earthquake hits the player's prefecture, the block tower's base
+    // shakes instead of ending the game; blocks can topple and are lost.
+    // After one in-game year (360 days) the round ends and the score is the
+    // total of every block still standing (fewer corners = worth more).
     public class GameManager : MonoBehaviour
     {
         [Header("Managers")]
@@ -46,13 +48,12 @@ namespace EarthquakeGame
         public Text scoreText;
         public GameObject roundEndPanel;
         public Text roundEndScoreText;
-        public Slider placementSlider;
-        public Text placementPositionText;
         public Transform dropIndicator;
         public GameObject titleScreenPanel;
         public Text earthquakeAlertText;
-        [Tooltip("How long the earthquake alert banner stays visible, in seconds.")]
-        public float earthquakeAlertDuration = 2.5f;
+        public Text intensityMapText;
+        [Tooltip("How long the earthquake alert banner/intensity map stays visible, in seconds.")]
+        public float earthquakeAlertDuration = 3.5f;
 
         private DateTime currentDate;
         private int survivalDays;
@@ -72,24 +73,29 @@ namespace EarthquakeGame
             if (titleScreenPanel != null) titleScreenPanel.SetActive(false);
         }
 
-        // Keeps the drop-preview marker and position readout in sync with
-        // the slider every frame, so the player always sees exactly where
-        // the next block will land before pressing "積む".
+        // Follows the mouse to preview where a block will drop, and places
+        // one (which also advances the day) on left click - as long as the
+        // click isn't on top of a UI element (shape buttons, panels, etc).
         void Update()
         {
-            if (isRoundOver || placementSlider == null) return;
+            if (isRoundOver || blockTowerManager == null || Camera.main == null) return;
 
-            float x = placementSlider.value;
-
-            if (placementPositionText != null)
-            {
-                placementPositionText.text = $"配置位置：{x:0.0}";
-            }
+            float distanceFromCamera = Camera.main.transform.position.z * -1f;
+            Vector3 screenPos = Input.mousePosition;
+            Vector3 worldPos = Camera.main.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, distanceFromCamera));
+            float x = blockTowerManager.ClampX(worldPos.x);
 
             if (dropIndicator != null)
             {
-                float y = blockTowerManager != null ? blockTowerManager.GetNextSpawnY() + 0.6f : 5f;
+                float y = blockTowerManager.GetNextSpawnY() + 0.6f;
                 dropIndicator.position = new Vector3(x, y, -0.5f);
+            }
+
+            bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+            if (!overUI && Input.GetMouseButtonDown(0))
+            {
+                blockTowerManager.PlaceBlock(selectedShape, x);
+                AdvanceDay();
             }
         }
 
@@ -110,6 +116,7 @@ namespace EarthquakeGame
             if (roundEndPanel != null) roundEndPanel.SetActive(false);
             if (earthquakeAlertCoroutine != null) { StopCoroutine(earthquakeAlertCoroutine); earthquakeAlertCoroutine = null; }
             if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
+            if (intensityMapText != null) intensityMapText.gameObject.SetActive(false);
 
             if (mapManager != null)
             {
@@ -123,17 +130,6 @@ namespace EarthquakeGame
         public void SelectSquare() => selectedShape = BlockShape.Square;
         public void SelectTriangle() => selectedShape = BlockShape.Triangle;
         public void SelectCircle() => selectedShape = BlockShape.Circle;
-
-        // Called by the "積む" button. Placing a block is the day's action.
-        public void OnPlaceBlockClicked()
-        {
-            if (isRoundOver) return;
-
-            float xPosition = placementSlider != null ? placementSlider.value : 0f;
-            blockTowerManager.PlaceBlock(selectedShape, xPosition);
-
-            AdvanceDay();
-        }
 
         // Called by MapManager when a prefecture button is clicked.
         public void OnPrefectureClicked(string prefectureName)
@@ -152,6 +148,7 @@ namespace EarthquakeGame
             EarthquakeEvent relevantForDisplay = todaysEvents.Count > 0 ? todaysEvents[0] : null;
 
             int shakeRank = 0;
+            EarthquakeEvent shakingEvent = null;
             foreach (var ev in todaysEvents)
             {
                 // Rule: judge by the intensity actually observed in the
@@ -163,6 +160,7 @@ namespace EarthquakeGame
                 if (rank > shakeRank)
                 {
                     shakeRank = rank;
+                    shakingEvent = ev;
                     relevantForDisplay = ev;
                 }
             }
@@ -172,11 +170,9 @@ namespace EarthquakeGame
                 if (blockTowerManager != null) blockTowerManager.Shake(shakeRank);
                 if (cameraShaker != null) cameraShaker.Shake(shakeRank);
                 if (earthquakeSoundPlayer != null) earthquakeSoundPlayer.PlayRumble(shakeRank);
-                if (earthquakeAlertText != null)
-                {
-                    if (earthquakeAlertCoroutine != null) StopCoroutine(earthquakeAlertCoroutine);
-                    earthquakeAlertCoroutine = StartCoroutine(ShowEarthquakeAlert(relevantForDisplay, shakeRank));
-                }
+
+                if (earthquakeAlertCoroutine != null) StopCoroutine(earthquakeAlertCoroutine);
+                earthquakeAlertCoroutine = StartCoroutine(ShowEarthquakeAlert(shakingEvent, shakeRank));
             }
 
             playerManager.AdvanceOneDay();
@@ -190,14 +186,45 @@ namespace EarthquakeGame
 
         private IEnumerator ShowEarthquakeAlert(EarthquakeEvent ev, int shakeRank)
         {
-            string intensityLabel = ev != null ? ev.GetIntensityFor(playerManager.CurrentPrefecture) : null;
-            earthquakeAlertText.text = $"地震発生！ 震度{intensityLabel ?? "?"}";
-            earthquakeAlertText.gameObject.SetActive(true);
+            if (earthquakeAlertText != null)
+            {
+                string intensityLabel = ev != null ? ev.GetIntensityFor(playerManager.CurrentPrefecture) : null;
+                earthquakeAlertText.text = $"地震発生！ 震度{intensityLabel ?? "?"}";
+                earthquakeAlertText.gameObject.SetActive(true);
+            }
+
+            if (intensityMapText != null && ev != null)
+            {
+                intensityMapText.text = BuildIntensityMapText(ev);
+                intensityMapText.gameObject.SetActive(true);
+            }
 
             yield return new WaitForSeconds(earthquakeAlertDuration);
 
-            earthquakeAlertText.gameObject.SetActive(false);
+            if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
+            if (intensityMapText != null) intensityMapText.gameObject.SetActive(false);
             earthquakeAlertCoroutine = null;
+        }
+
+        // A simple text-based "intensity map": every affected prefecture,
+        // colored and sorted by how strong the shaking was there.
+        private string BuildIntensityMapText(EarthquakeEvent ev)
+        {
+            var entries = new List<(string pref, string intensity, int rank)>();
+            foreach (var kv in ev.intensities)
+            {
+                entries.Add((kv.Key, kv.Value, IntensityScale.ToRank(kv.Value)));
+            }
+            entries.Sort((a, b) => b.rank.CompareTo(a.rank));
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"震央：{ev.epicenter}　M{ev.magnitude}");
+            foreach (var e in entries)
+            {
+                string hex = IntensityScale.GetColorHex(e.intensity);
+                sb.AppendLine($"<color=#{hex}>{e.pref}：震度{e.intensity}</color>");
+            }
+            return sb.ToString();
         }
 
         private void EndRound()
@@ -235,7 +262,8 @@ namespace EarthquakeGame
             if (mapManager != null)
             {
                 mapManager.Refresh(playerManager.CurrentPrefecture,
-                    playerManager.CanMoveNow ? playerManager.GetNeighbors(playerManager.CurrentPrefecture) : new List<string>());
+                    playerManager.GetNeighbors(playerManager.CurrentPrefecture),
+                    playerManager.CanMoveNow);
             }
 
             if (fortuneText != null && fortuneTeller != null)

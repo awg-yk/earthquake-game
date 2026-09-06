@@ -48,5 +48,19 @@ namespace EarthquakeGame
         {
             return ToRank(intensity) >= 5;
         }
+
+        // Hex color (no '#') used to render this intensity in the
+        // earthquake intensity map/legend, roughly following the color
+        // scheme used on real JMA intensity maps.
+        public static string GetColorHex(string intensity)
+        {
+            int rank = ToRank(intensity);
+            if (rank >= 9) return "9C27B0";      // 7 - purple
+            if (rank >= 7) return "F44336";      // 6弱/6強 - red
+            if (rank >= 5) return "FF9800";      // 5弱/5強 - orange
+            if (rank >= 3) return "FFC107";      // 3/4 - amber
+            if (rank >= 1) return "4CAF50";      // 1/2 - green
+            return "9E9E9E";                      // unknown - gray
+        }
     }
 }

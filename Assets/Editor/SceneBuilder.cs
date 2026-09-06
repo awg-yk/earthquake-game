@@ -42,24 +42,25 @@ public static class SceneBuilder
         GameObject buttonContainer = CreateButtonContainer(canvas.transform);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
 
-        // --- Block placement controls (replaces the old "next day" button) ---
-        Button squareButton = CreateButton(canvas.transform, "SquareButton", 100, -260, 120, 50, "四角");
-        Button triangleButton = CreateButton(canvas.transform, "TriangleButton", 230, -260, 120, 50, "三角");
-        Button circleButton = CreateButton(canvas.transform, "CircleButton", 360, -260, 120, 50, "丸");
-
-        Slider placementSlider = CreateSlider(canvas.transform, "PlacementSlider", 230, -320, 380, 30, -4f, 4f, 0f);
-        Text placementPositionText = CreateText(canvas.transform, "PlacementPositionText", 230, -285, 380, 30, 18, "配置位置：0.0");
-        placementPositionText.alignment = TextAnchor.MiddleCenter;
-        Button placeButton = CreateButton(canvas.transform, "PlaceButton", 230, -370, 200, 50, "積む（次の日へ）");
+        // --- Block shape selection (click on the tower itself to place one) ---
+        Button squareButton = CreateButton(canvas.transform, "SquareButton", 100, -300, 120, 70, "□\n3点");
+        Button triangleButton = CreateButton(canvas.transform, "TriangleButton", 230, -300, 120, 70, "△\n6点");
+        Button circleButton = CreateButton(canvas.transform, "CircleButton", 360, -300, 120, 70, "○\n10点");
+        Text placementHintText = CreateText(canvas.transform, "PlacementHintText", 230, -230, 380, 30, 16, "形を選んで、土台をクリックすると積めます");
+        placementHintText.alignment = TextAnchor.MiddleCenter;
         Transform dropIndicator = CreateDropIndicator();
 
         GameObject roundEndPanel = CreateRoundEndPanel(canvas.transform, out Text roundEndScoreText, out Button restartButton);
 
-        Text earthquakeAlertText = CreateText(canvas.transform, "EarthquakeAlertText", 0, 260, 600, 60, 32, "地震発生！");
+        Text earthquakeAlertText = CreateText(canvas.transform, "EarthquakeAlertText", 0, 320, 600, 60, 32, "地震発生！");
         earthquakeAlertText.alignment = TextAnchor.MiddleCenter;
         earthquakeAlertText.color = new Color(0.85f, 0.1f, 0.1f);
         earthquakeAlertText.fontStyle = FontStyle.Bold;
         earthquakeAlertText.gameObject.SetActive(false);
+
+        Text intensityMapText = CreateText(canvas.transform, "IntensityMapText", 250, -80, 480, 300, 16, "");
+        intensityMapText.supportRichText = true;
+        intensityMapText.gameObject.SetActive(false);
 
         GameObject titleScreenPanel = CreateTitleScreenPanel(canvas.transform, out Button startButton);
 
@@ -95,12 +96,11 @@ public static class SceneBuilder
         gameManager.scoreText = scoreText;
         gameManager.roundEndPanel = roundEndPanel;
         gameManager.roundEndScoreText = roundEndScoreText;
-        gameManager.placementSlider = placementSlider;
-        gameManager.placementPositionText = placementPositionText;
         gameManager.dropIndicator = dropIndicator;
         gameManager.cameraShaker = mainCamera.GetComponent<CameraShaker>();
         gameManager.earthquakeSoundPlayer = mainCamera.GetComponent<EarthquakeSoundPlayer>();
         gameManager.earthquakeAlertText = earthquakeAlertText;
+        gameManager.intensityMapText = intensityMapText;
         gameManager.titleScreenPanel = titleScreenPanel;
 
         mapManager.prefectureButtonPrefab = prefectureButtonTemplate;
@@ -112,7 +112,6 @@ public static class SceneBuilder
         UnityEventTools.AddVoidPersistentListener(squareButton.onClick, gameManager.SelectSquare);
         UnityEventTools.AddVoidPersistentListener(triangleButton.onClick, gameManager.SelectTriangle);
         UnityEventTools.AddVoidPersistentListener(circleButton.onClick, gameManager.SelectCircle);
-        UnityEventTools.AddVoidPersistentListener(placeButton.onClick, gameManager.OnPlaceBlockClicked);
         UnityEventTools.AddVoidPersistentListener(restartButton.onClick, gameManager.OnRestartClicked);
         UnityEventTools.AddVoidPersistentListener(startButton.onClick, gameManager.OnStartButtonClicked);
 
@@ -241,85 +240,6 @@ public static class SceneBuilder
         text.color = Color.black;
 
         return button;
-    }
-
-    // Full-stretch RectTransform (anchors 0..1) inset by the given margins,
-    // used for slider sub-parts so the Fill bar actually resizes with value
-    // instead of staying a fixed size like a center-anchored Rect would.
-    private static RectTransform SetupStretchRect(GameObject obj, Transform parent, float insetLeft, float insetRight, float insetTop, float insetBottom)
-    {
-        RectTransform rt = obj.GetComponent<RectTransform>();
-        if (rt == null) rt = obj.AddComponent<RectTransform>();
-        rt.SetParent(parent, false);
-        rt.anchorMin = new Vector2(0, 0);
-        rt.anchorMax = new Vector2(1, 1);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.offsetMin = new Vector2(insetLeft, insetBottom);
-        rt.offsetMax = new Vector2(-insetRight, -insetTop);
-        return rt;
-    }
-
-    // A slider redesigned to make "where the block will land" obvious:
-    // a thick, high-contrast track with tick marks at each whole unit and a
-    // bold circular handle, plus (wired up separately in BuildMainScene) a
-    // world-space drop marker and a live numeric readout above it.
-    private static Slider CreateSlider(Transform parent, string name, float x, float y, float w, float h, float min, float max, float defaultValue)
-    {
-        GameObject sliderObj = new GameObject(name);
-        SetupRect(sliderObj, parent, x, y, w, h);
-        Slider slider = sliderObj.AddComponent<Slider>();
-
-        GameObject background = new GameObject("Background");
-        SetupStretchRect(background, sliderObj.transform, 0, 0, 0, 0);
-        var bgImage = background.AddComponent<Image>();
-        bgImage.color = new Color(0.25f, 0.28f, 0.32f);
-
-        // Tick marks at every integer position so the player can see how the
-        // slider range maps onto discrete-looking spots along the base.
-        int tickCount = Mathf.RoundToInt(max - min) + 1;
-        for (int i = 0; i < tickCount; i++)
-        {
-            float t = tickCount > 1 ? (float)i / (tickCount - 1) : 0.5f;
-            GameObject tick = new GameObject("Tick");
-            RectTransform tickRect = tick.AddComponent<RectTransform>();
-            tickRect.SetParent(background.transform, false);
-            tickRect.anchorMin = new Vector2(t, 0);
-            tickRect.anchorMax = new Vector2(t, 1);
-            tickRect.pivot = new Vector2(0.5f, 0.5f);
-            tickRect.sizeDelta = new Vector2(2, 0);
-            tickRect.anchoredPosition = Vector2.zero;
-            var tickImage = tick.AddComponent<Image>();
-            tickImage.color = new Color(1f, 1f, 1f, 0.35f);
-        }
-
-        GameObject fillArea = new GameObject("Fill Area");
-        SetupStretchRect(fillArea, sliderObj.transform, 10, 10, 0, 0);
-
-        GameObject fill = new GameObject("Fill");
-        var fillRect = SetupStretchRect(fill, fillArea.transform, 0, 0, 0, 0);
-        var fillImage = fill.AddComponent<Image>();
-        fillImage.color = new Color(0.95f, 0.55f, 0.2f);
-
-        GameObject handleArea = new GameObject("Handle Slide Area");
-        SetupStretchRect(handleArea, sliderObj.transform, 10, 10, 0, 0);
-
-        GameObject handle = new GameObject("Handle");
-        RectTransform handleRect = handle.AddComponent<RectTransform>();
-        handleRect.SetParent(handleArea.transform, false);
-        handleRect.sizeDelta = new Vector2(28, h + 10);
-        var handleImage = handle.AddComponent<Image>();
-        handleImage.color = new Color(0.95f, 0.95f, 0.95f);
-
-        slider.targetGraphic = handleImage;
-        slider.fillRect = fillRect;
-        slider.handleRect = handleRect;
-        slider.direction = Slider.Direction.LeftToRight;
-        slider.minValue = min;
-        slider.maxValue = max;
-        slider.wholeNumbers = false;
-        slider.value = defaultValue;
-
-        return slider;
     }
 
     // A full-screen title panel shown on top of everything at launch. The

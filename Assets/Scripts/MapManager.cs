@@ -4,10 +4,10 @@ using UnityEngine.UI;
 
 namespace EarthquakeGame
 {
-    // Phase 1 map: one button per prefecture, arranged in a scroll view.
+    // Shows only the player's current prefecture and its direct neighbors
+    // (rebuilt every time the player moves), instead of all 46 at once.
     // This intentionally skips a hand-drawn/geographic map image - the
     // spec asks to prioritize the game system over visuals for now.
-    // Clicking a button asks GameManager to move there.
     public class MapManager : MonoBehaviour
     {
         [Tooltip("Prefab with a Button + Text/TMP child, used for each prefecture.")]
@@ -16,54 +16,50 @@ namespace EarthquakeGame
         [Tooltip("Parent transform (e.g. a Grid Layout Group) that buttons are instantiated under.")]
         public Transform buttonContainer;
 
-        public Color normalColor = Color.white;
         public Color currentColor = new Color(1f, 0.6f, 0.2f); // orange
         public Color reachableColor = new Color(0.6f, 1f, 0.6f); // light green
+        public Color notYetReachableColor = new Color(0.75f, 0.75f, 0.75f); // gray
 
-        private Dictionary<string, Button> buttonsByPrefecture = new Dictionary<string, Button>();
         private GameManager gameManager;
 
         public void Init(GameManager owner, IEnumerable<string> allPrefectures)
         {
             gameManager = owner;
+            // allPrefectures is no longer used to pre-build every button -
+            // Refresh() builds only the current + neighboring prefectures.
+        }
+
+        public void Refresh(string currentPrefecture, List<string> neighbors, bool canMove)
+        {
             foreach (Transform child in buttonContainer)
             {
                 Destroy(child.gameObject);
             }
-            buttonsByPrefecture.Clear();
 
-            foreach (var name in allPrefectures)
+            CreateButton(currentPrefecture, currentColor, false);
+
+            foreach (var neighbor in neighbors)
             {
-                Button btn = Instantiate(prefectureButtonPrefab, buttonContainer);
-                btn.gameObject.SetActive(true);
-                var label = btn.GetComponentInChildren<Text>();
-                if (label != null) label.text = name;
-                string captured = name;
-                btn.onClick.AddListener(() => gameManager.OnPrefectureClicked(captured));
-                buttonsByPrefecture[name] = btn;
+                CreateButton(neighbor, canMove ? reachableColor : notYetReachableColor, canMove);
             }
         }
 
-        public void Refresh(string currentPrefecture, List<string> reachablePrefectures)
+        private void CreateButton(string prefectureName, Color color, bool interactable)
         {
-            var reachableSet = new HashSet<string>(reachablePrefectures);
-            foreach (var kv in buttonsByPrefecture)
-            {
-                var image = kv.Value.GetComponent<Image>();
-                if (image == null) continue;
+            Button btn = Instantiate(prefectureButtonPrefab, buttonContainer);
+            btn.gameObject.SetActive(true);
+            btn.interactable = interactable;
 
-                if (kv.Key == currentPrefecture)
-                {
-                    image.color = currentColor;
-                }
-                else if (reachableSet.Contains(kv.Key))
-                {
-                    image.color = reachableColor;
-                }
-                else
-                {
-                    image.color = normalColor;
-                }
+            var label = btn.GetComponentInChildren<Text>();
+            if (label != null) label.text = prefectureName;
+
+            var image = btn.GetComponent<Image>();
+            if (image != null) image.color = color;
+
+            if (interactable)
+            {
+                string captured = prefectureName;
+                btn.onClick.AddListener(() => gameManager.OnPrefectureClicked(captured));
             }
         }
     }
