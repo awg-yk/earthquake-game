@@ -14,6 +14,7 @@ namespace EarthquakeGame
         public PlayerManager playerManager;
         public EarthquakeManager earthquakeManager;
         public MapManager mapManager;
+        public FortuneTeller fortuneTeller;
 
         [Header("Config")]
         [Tooltip("The in-game calendar starts on this date.")]
@@ -29,6 +30,7 @@ namespace EarthquakeGame
         public Text currentPrefectureText;
         public Text nextMoveText;
         public Text latestEarthquakeText;
+        public Text fortuneText;
         public GameObject gameOverPanel;
         public Button advanceDayButton;
 
@@ -141,6 +143,11 @@ namespace EarthquakeGame
             {
                 mapManager.Refresh(playerManager.CurrentPrefecture,
                     playerManager.CanMoveNow ? playerManager.GetNeighbors(playerManager.CurrentPrefecture) : new List<string>());
+            }
+
+            if (fortuneText != null && fortuneTeller != null)
+            {
+                fortuneText.text = fortuneTeller.GetFortune(currentDate, playerManager.CurrentPrefecture);
             }
         }
 

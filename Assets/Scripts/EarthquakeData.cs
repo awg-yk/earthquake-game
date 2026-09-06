@@ -10,6 +10,8 @@ namespace EarthquakeGame
         public string time;
         public string epicenter;
         public double magnitude;
+        public double latitude;
+        public double longitude;
         public Dictionary<string, string> intensities = new Dictionary<string, string>();
 
         public string GetIntensityFor(string prefectureName)

@@ -17,10 +17,12 @@ namespace EarthquakeGame
         public int DaysUntilNextMove { get; private set; }
 
         private Dictionary<string, List<string>> adjacency = new Dictionary<string, List<string>>();
+        private Dictionary<string, (double lat, double lon)> coordinates = new Dictionary<string, (double, double)>();
 
         public void LoadData()
         {
             adjacency.Clear();
+            coordinates.Clear();
 
             TextAsset json = Resources.Load<TextAsset>(dataResourcePath);
             if (json == null)
@@ -44,7 +46,17 @@ namespace EarthquakeGame
                     }
                 }
                 adjacency[name] = neighborsList;
+
+                double lat = entry.TryGetValue("lat", out var la) ? System.Convert.ToDouble(la) : 0.0;
+                double lon = entry.TryGetValue("lon", out var lo) ? System.Convert.ToDouble(lo) : 0.0;
+                coordinates[name] = (lat, lon);
             }
+        }
+
+        // Returns (0,0) for an unknown prefecture name.
+        public (double lat, double lon) GetCoordinates(string prefectureName)
+        {
+            return coordinates.TryGetValue(prefectureName, out var coord) ? coord : (0.0, 0.0);
         }
 
         public IEnumerable<string> AllPrefectureNames => adjacency.Keys;

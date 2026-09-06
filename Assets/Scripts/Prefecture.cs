@@ -10,6 +10,8 @@ namespace EarthquakeGame
     {
         public string name;
         public List<string> neighbors;
+        public double lat;
+        public double lon;
     }
 
     [System.Serializable]

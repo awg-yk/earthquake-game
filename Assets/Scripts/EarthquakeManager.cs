@@ -43,7 +43,9 @@ namespace EarthquakeGame
                     date = (string)entry["date"],
                     time = entry.TryGetValue("time", out var t) ? (string)t : "",
                     epicenter = entry.TryGetValue("epicenter", out var e) ? (string)e : "",
-                    magnitude = entry.TryGetValue("magnitude", out var m) ? Convert.ToDouble(m) : 0.0
+                    magnitude = entry.TryGetValue("magnitude", out var m) ? Convert.ToDouble(m) : 0.0,
+                    latitude = entry.TryGetValue("latitude", out var la) ? Convert.ToDouble(la) : 0.0,
+                    longitude = entry.TryGetValue("longitude", out var lo) ? Convert.ToDouble(lo) : 0.0
                 };
 
                 if (entry.TryGetValue("intensities", out var intensitiesObj))

@@ -35,6 +35,7 @@ public static class SceneBuilder
         Text currentPrefectureText = CreateText(canvas.transform, "CurrentPrefectureText", -450, 250, 400, 40, 24, "現在地：東京都");
         Text nextMoveText = CreateText(canvas.transform, "NextMoveText", -450, 210, 400, 40, 24, "次回移動可能：あと10日");
         Text latestEarthquakeText = CreateText(canvas.transform, "LatestEarthquakeText", 250, 150, 480, 260, 20, "最新の地震：なし");
+        Text fortuneText = CreateText(canvas.transform, "FortuneText", -450, 100, 480, 100, 18, "占い師：…");
 
         Button advanceDayButton = CreateButton(canvas.transform, "AdvanceDayButton", -450, -280, 200, 60, "次の日へ");
 
@@ -47,22 +48,29 @@ public static class SceneBuilder
         GameObject playerManagerObj = new GameObject("PlayerManager");
         GameObject earthquakeManagerObj = new GameObject("EarthquakeManager");
         GameObject mapManagerObj = new GameObject("MapManager");
+        GameObject fortuneTellerObj = new GameObject("FortuneTeller");
 
         var gameManager = gameManagerObj.AddComponent<GameManager>();
         var playerManager = playerManagerObj.AddComponent<PlayerManager>();
         var earthquakeManager = earthquakeManagerObj.AddComponent<EarthquakeManager>();
         var mapManager = mapManagerObj.AddComponent<MapManager>();
+        var fortuneTeller = fortuneTellerObj.AddComponent<FortuneTeller>();
 
         gameManager.playerManager = playerManager;
         gameManager.earthquakeManager = earthquakeManager;
         gameManager.mapManager = mapManager;
+        gameManager.fortuneTeller = fortuneTeller;
         gameManager.dateText = dateText;
         gameManager.survivalDaysText = survivalDaysText;
         gameManager.currentPrefectureText = currentPrefectureText;
         gameManager.nextMoveText = nextMoveText;
         gameManager.latestEarthquakeText = latestEarthquakeText;
+        gameManager.fortuneText = fortuneText;
         gameManager.gameOverPanel = gameOverPanel;
         gameManager.advanceDayButton = advanceDayButton;
+
+        fortuneTeller.earthquakeManager = earthquakeManager;
+        fortuneTeller.playerManager = playerManager;
 
         mapManager.prefectureButtonPrefab = prefectureButtonTemplate;
         mapManager.buttonContainer = buttonContainer.transform;
