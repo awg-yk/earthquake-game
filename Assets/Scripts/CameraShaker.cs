@@ -48,9 +48,11 @@ namespace EarthquakeGame
             {
                 elapsed += Time.deltaTime;
                 float damping = 1f - (elapsed / duration);
+                // Horizontal-only: real earthquakes read here as side-to-side
+                // sway, and a vertical component made the base look like it
+                // was bobbing up and down - an unstable, unintended look.
                 float offsetX = (Mathf.PerlinNoise(Time.time * frequency, 0f) - 0.5f) * 2f * amplitude * damping;
-                float offsetY = (Mathf.PerlinNoise(0f, Time.time * frequency) - 0.5f) * 2f * amplitude * damping;
-                transform.position = restPosition + new Vector3(offsetX, offsetY, 0);
+                transform.position = restPosition + new Vector3(offsetX, 0, 0);
                 yield return null;
             }
 
