@@ -23,10 +23,19 @@ namespace EarthquakeGame
 
         public void Play()
         {
-            if (audioSource.isPlaying) return;
+            if (audioSource.isPlaying)
+            {
+                Debug.Log("BGMPlayer: Play() called but audioSource already playing - ignoring.");
+                return;
+            }
+
+            audioSource.mute = false;
             audioSource.clip = BuildLoop();
             audioSource.volume = volume;
+            AudioListener.volume = 1f;
             audioSource.Play();
+
+            Debug.Log($"BGMPlayer: started playback. clip length={audioSource.clip.length:0.00}s, volume={audioSource.volume}, AudioListener.volume={AudioListener.volume}, isPlaying={audioSource.isPlaying}");
         }
 
         public void Stop() => audioSource.Stop();

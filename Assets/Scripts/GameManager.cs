@@ -43,7 +43,7 @@ namespace EarthquakeGame
         public int forecastIntervalDays = 10;
 
         [Tooltip("Minimum felt intensity rank (3 = shindo 3) that actually shakes the tower - matches the real-world threshold where people notice shaking.")]
-        public int minFeltRankToShake = 3;
+        public int minFeltRankToShake = 2;
 
         [Header("UI (Text can be swapped for TMP_Text)")]
         public Text dateText;

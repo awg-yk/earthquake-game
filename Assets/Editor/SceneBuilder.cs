@@ -84,6 +84,7 @@ public static class SceneBuilder
 
         var gameManager = gameManagerObj.AddComponent<GameManager>();
         var playerManager = playerManagerObj.AddComponent<PlayerManager>();
+        playerManager.moveIntervalDays = 1; // explicit, so a stale saved scene value can never override this
         var earthquakeManager = earthquakeManagerObj.AddComponent<EarthquakeManager>();
         var mapManager = mapManagerObj.AddComponent<MapManager>();
         var fortuneTeller = fortuneTellerObj.AddComponent<FortuneTeller>();
@@ -342,8 +343,10 @@ public static class SceneBuilder
 
     private static GameObject CreateButtonContainer(Transform parent)
     {
+        // Placed below the intensity map panel (which now sits at the very
+        // top-right, see CreateIntensityMapPanel) so the two never overlap.
         GameObject container = new GameObject("ButtonContainer");
-        SetupRectAnchored(container, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -20, 460, 380);
+        SetupRectAnchored(container, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -260, 460, 300);
 
         GridLayoutGroup grid = container.AddComponent<GridLayoutGroup>();
         grid.cellSize = new Vector2(110, 36);
@@ -400,8 +403,10 @@ public static class SceneBuilder
     // bottom - so it never overlaps either.
     private static IntensityMapView CreateIntensityMapPanel(Transform parent)
     {
+        // Top-right corner, above the prefecture button list (which is
+        // positioned below this panel - see CreateButtonContainer).
         GameObject panel = new GameObject("IntensityMapPanel");
-        RectTransform panelRect = SetupRectAnchored(panel, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -430, 280, 260);
+        RectTransform panelRect = SetupRectAnchored(panel, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -20, 280, 230);
         Image panelImage = panel.AddComponent<Image>();
         panelImage.color = new Color(0.93f, 0.93f, 0.95f);
 
@@ -410,7 +415,7 @@ public static class SceneBuilder
         label.color = Color.black;
 
         GameObject mapAreaObj = new GameObject("MapArea");
-        RectTransform mapAreaRect = SetupRectAnchored(mapAreaObj, panel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -28, 260, 180);
+        RectTransform mapAreaRect = SetupRectAnchored(mapAreaObj, panel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -28, 260, 150);
 
         IntensityMapView view = panel.AddComponent<IntensityMapView>();
         view.mapArea = mapAreaRect;
