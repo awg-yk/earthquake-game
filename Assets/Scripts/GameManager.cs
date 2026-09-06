@@ -69,6 +69,14 @@ namespace EarthquakeGame
         public Transform fortuneAnimationIcon;
         public float fortuneAnimationDuration = 3f;
 
+        [Header("Manual camera control")]
+        [Tooltip("How fast the arrow keys / WASD pan the camera, in world units per second.")]
+        public float cameraPanSpeed = 6f;
+        [Tooltip("How fast the scroll wheel zooms the camera in/out.")]
+        public float cameraZoomSpeed = 8f;
+        public float manualZoomMin = -3f;
+        public float manualZoomMax = 6f;
+
         private DateTime currentDate;
         private int survivalDays;
         private bool isRoundOver;
@@ -77,6 +85,12 @@ namespace EarthquakeGame
         private Coroutine earthquakeAlertCoroutine;
         private Coroutine fortuneAnimationCoroutine;
         private string currentForecast = "";
+
+        // Manual offsets the player adds on top of the automatic
+        // tower-height follow, so they can freely look up/down/around the
+        // tower instead of being locked to the auto-framed view.
+        private float manualPanYOffset = 0f;
+        private float manualZoomOffset = 0f;
 
         void Start()
         {
@@ -199,18 +213,35 @@ namespace EarthquakeGame
         }
 
         // Zooms out and pans up as the tower grows, so tall towers never
-        // scroll out of view above the camera's default frame.
+        // scroll out of view above the camera's default frame. The player
+        // can additionally pan (arrow keys / WASD) and zoom (scroll wheel)
+        // on top of this auto-framing to freely look around the tower.
         private void FollowTowerHeight()
         {
             Camera cam = Camera.main;
-            float top = blockTowerManager.CurrentHeight; // above the base, base is at world Y ~ 0
-            float desiredHalfHeight = Mathf.Max(6f, (top + 3f) * 0.5f + 1f);
-            float desiredCenterY = Mathf.Max(3f, top * 0.5f + 1f);
 
-            cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, desiredHalfHeight, Time.deltaTime * 2f);
+            bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+
+            float vertical = 0f;
+            if (Input.GetKey(KeyCode.UpArrow) || Input.GetKey(KeyCode.W)) vertical += 1f;
+            if (Input.GetKey(KeyCode.DownArrow) || Input.GetKey(KeyCode.S)) vertical -= 1f;
+            manualPanYOffset += vertical * cameraPanSpeed * Time.deltaTime;
+
+            if (!overUI)
+            {
+                float scroll = Input.mouseScrollDelta.y;
+                manualZoomOffset -= scroll * cameraZoomSpeed * Time.deltaTime * 60f * 0.02f;
+            }
+            manualZoomOffset = Mathf.Clamp(manualZoomOffset, manualZoomMin, manualZoomMax);
+
+            float top = blockTowerManager.CurrentHeight; // above the base, base is at world Y ~ 0
+            float desiredHalfHeight = Mathf.Max(6f, (top + 3f) * 0.5f + 1f) + manualZoomOffset;
+            float desiredCenterY = Mathf.Max(3f, top * 0.5f + 1f) + manualPanYOffset;
+
+            cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, desiredHalfHeight, Time.deltaTime * 4f);
 
             Vector3 pos = cam.transform.position;
-            pos.y = Mathf.Lerp(pos.y, desiredCenterY, Time.deltaTime * 2f);
+            pos.y = Mathf.Lerp(pos.y, desiredCenterY, Time.deltaTime * 4f);
             cam.transform.position = pos;
         }
 
@@ -320,6 +351,7 @@ namespace EarthquakeGame
             if (intensityMapView != null)
             {
                 intensityMapView.SetIntensities(displayEvent.intensities);
+                intensityMapView.BringToFront();
             }
 
             yield return new WaitForSeconds(duration);
@@ -347,6 +379,7 @@ namespace EarthquakeGame
             if (intensityMapView != null && fortuneTeller != null)
             {
                 intensityMapView.SetIntensities(fortuneTeller.LastForecastIntensities);
+                intensityMapView.BringToFront();
             }
 
             float elapsed = 0f;

@@ -126,6 +126,15 @@ namespace EarthquakeGame
             }
         }
 
+        // Fortune-forecast and earthquake-alert overlays are drawn as
+        // full-screen panels created after this one, so without this the
+        // map would render underneath them and never be visible while an
+        // overlay is showing.
+        public void BringToFront()
+        {
+            transform.SetAsLastSibling();
+        }
+
         public void ClearAll()
         {
             foreach (var kv in prefecturePolygons)
