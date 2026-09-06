@@ -31,13 +31,14 @@ public static class SceneBuilder
         Canvas canvas = CreateCanvas();
         CreateEventSystem();
 
-        Text dateText = CreateText(canvas.transform, "DateText", -450, 330, 400, 40, 22, "日付：2000年1月1日");
-        Text survivalDaysText = CreateText(canvas.transform, "SurvivalDaysText", -450, 295, 400, 40, 22, "経過日数：0/360日");
-        Text currentPrefectureText = CreateText(canvas.transform, "CurrentPrefectureText", -450, 260, 400, 40, 22, "現在地：東京都");
-        Text nextMoveText = CreateText(canvas.transform, "NextMoveText", -450, 225, 400, 40, 22, "次回移動可能：あと10日");
-        Text scoreText = CreateText(canvas.transform, "ScoreText", -450, 190, 400, 40, 22, "現在のスコア：0点（積み木0個）");
-        Text latestEarthquakeText = CreateText(canvas.transform, "LatestEarthquakeText", -450, 100, 400, 140, 18, "最新の地震：なし");
-        Text fortuneText = CreateText(canvas.transform, "FortuneText", -450, -10, 400, 90, 16, "占い師：…");
+        Vector2 topLeft = new Vector2(0f, 1f);
+        Text dateText = CreateTextAnchored(canvas.transform, "DateText", topLeft, topLeft, 20, -20, 380, 40, 22, "日付：2000年1月1日");
+        Text survivalDaysText = CreateTextAnchored(canvas.transform, "SurvivalDaysText", topLeft, topLeft, 20, -55, 380, 40, 22, "経過日数：0/360日");
+        Text currentPrefectureText = CreateTextAnchored(canvas.transform, "CurrentPrefectureText", topLeft, topLeft, 20, -90, 380, 40, 22, "現在地：東京都");
+        Text nextMoveText = CreateTextAnchored(canvas.transform, "NextMoveText", topLeft, topLeft, 20, -125, 380, 40, 22, "次回移動可能：あと10日");
+        Text scoreText = CreateTextAnchored(canvas.transform, "ScoreText", topLeft, topLeft, 20, -160, 380, 40, 22, "現在のスコア：0点（積み木0個）");
+        Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topLeft, topLeft, 20, -200, 380, 140, 18, "最新の地震：なし");
+        Text fortuneText = CreateTextAnchored(canvas.transform, "FortuneText", topLeft, topLeft, 20, -350, 380, 90, 16, "占い師：…");
 
         GameObject buttonContainer = CreateButtonContainer(canvas.transform);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
@@ -58,9 +59,7 @@ public static class SceneBuilder
         earthquakeAlertText.fontStyle = FontStyle.Bold;
         earthquakeAlertText.gameObject.SetActive(false);
 
-        Text intensityMapText = CreateText(canvas.transform, "IntensityMapText", 250, -80, 480, 300, 16, "");
-        intensityMapText.supportRichText = true;
-        intensityMapText.gameObject.SetActive(false);
+        IntensityMapView intensityMapView = CreateIntensityMapPanel(canvas.transform);
 
         GameObject titleScreenPanel = CreateTitleScreenPanel(canvas.transform, out Button startButton);
 
@@ -100,7 +99,7 @@ public static class SceneBuilder
         gameManager.cameraShaker = mainCamera.GetComponent<CameraShaker>();
         gameManager.earthquakeSoundPlayer = mainCamera.GetComponent<EarthquakeSoundPlayer>();
         gameManager.earthquakeAlertText = earthquakeAlertText;
-        gameManager.intensityMapText = intensityMapText;
+        gameManager.intensityMapView = intensityMapView;
         gameManager.titleScreenPanel = titleScreenPanel;
 
         mapManager.prefectureButtonPrefab = prefectureButtonTemplate;
@@ -200,12 +199,23 @@ public static class SceneBuilder
 
     private static RectTransform SetupRect(GameObject obj, Transform parent, float x, float y, float w, float h)
     {
+        return SetupRectAnchored(obj, parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), x, y, w, h);
+    }
+
+    // Anchors the RectTransform at a specific point of its parent (e.g.
+    // (0,1) = top-left, (1,1) = top-right) instead of always the center.
+    // This keeps HUD elements fully on-screen even when the actual game
+    // window aspect ratio doesn't match the 1280x720 reference resolution -
+    // a center-anchored element far from center can otherwise be pushed
+    // past the visible edge.
+    private static RectTransform SetupRectAnchored(GameObject obj, Transform parent, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h)
+    {
         RectTransform rt = obj.GetComponent<RectTransform>();
         if (rt == null) rt = obj.AddComponent<RectTransform>();
         rt.SetParent(parent, false);
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchorMin = anchor;
+        rt.anchorMax = anchor;
+        rt.pivot = pivot;
         rt.anchoredPosition = new Vector2(x, y);
         rt.sizeDelta = new Vector2(w, h);
         return rt;
@@ -213,8 +223,13 @@ public static class SceneBuilder
 
     private static Text CreateText(Transform parent, string name, float x, float y, float w, float h, int fontSize, string content)
     {
+        return CreateTextAnchored(parent, name, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), x, y, w, h, fontSize, content);
+    }
+
+    private static Text CreateTextAnchored(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h, int fontSize, string content)
+    {
         GameObject obj = new GameObject(name);
-        SetupRect(obj, parent, x, y, w, h);
+        SetupRectAnchored(obj, parent, anchor, pivot, x, y, w, h);
         Text text = obj.AddComponent<Text>();
         text.font = GetDefaultFont();
         text.fontSize = fontSize;
@@ -293,7 +308,7 @@ public static class SceneBuilder
     private static GameObject CreateButtonContainer(Transform parent)
     {
         GameObject container = new GameObject("ButtonContainer");
-        SetupRect(container, parent, 250, 150, 480, 380);
+        SetupRectAnchored(container, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -20, 460, 380);
 
         GridLayoutGroup grid = container.AddComponent<GridLayoutGroup>();
         grid.cellSize = new Vector2(110, 36);
@@ -331,6 +346,29 @@ public static class SceneBuilder
 
         obj.transform.position = new Vector3(0, 7f, -0.5f);
         return obj.transform;
+    }
+
+    // A schematic "intensity map": a fixed-size panel with one small marker
+    // per prefecture, positioned by projecting real lat/lon (no map artwork
+    // needed - the dots alone trace roughly the shape of Japan). Markers
+    // light up by intensity via IntensityMapView.SetIntensities().
+    private static IntensityMapView CreateIntensityMapPanel(Transform parent)
+    {
+        GameObject panel = new GameObject("IntensityMapPanel");
+        RectTransform panelRect = SetupRectAnchored(panel, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -420, 280, 260);
+        Image panelImage = panel.AddComponent<Image>();
+        panelImage.color = new Color(0.93f, 0.93f, 0.95f);
+
+        Text label = CreateTextAnchored(panel.transform, "IntensityMapLabel", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -4, 260, 24, 14, "震度マップ");
+        label.alignment = TextAnchor.UpperCenter;
+        label.color = Color.black;
+
+        GameObject mapAreaObj = new GameObject("MapArea");
+        RectTransform mapAreaRect = SetupRectAnchored(mapAreaObj, panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -12, 260, 220);
+
+        IntensityMapView view = panel.AddComponent<IntensityMapView>();
+        view.mapArea = mapAreaRect;
+        return view;
     }
 
     // A disabled template button that MapManager.Instantiate()s from at

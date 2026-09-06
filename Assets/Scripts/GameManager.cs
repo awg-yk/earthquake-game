@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -51,7 +50,7 @@ namespace EarthquakeGame
         public Transform dropIndicator;
         public GameObject titleScreenPanel;
         public Text earthquakeAlertText;
-        public Text intensityMapText;
+        public IntensityMapView intensityMapView;
         [Tooltip("How long the earthquake alert banner/intensity map stays visible, in seconds.")]
         public float earthquakeAlertDuration = 3.5f;
 
@@ -116,7 +115,7 @@ namespace EarthquakeGame
             if (roundEndPanel != null) roundEndPanel.SetActive(false);
             if (earthquakeAlertCoroutine != null) { StopCoroutine(earthquakeAlertCoroutine); earthquakeAlertCoroutine = null; }
             if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
-            if (intensityMapText != null) intensityMapText.gameObject.SetActive(false);
+            if (intensityMapView != null) intensityMapView.ClearAll();
 
             if (mapManager != null)
             {
@@ -189,42 +188,22 @@ namespace EarthquakeGame
             if (earthquakeAlertText != null)
             {
                 string intensityLabel = ev != null ? ev.GetIntensityFor(playerManager.CurrentPrefecture) : null;
-                earthquakeAlertText.text = $"地震発生！ 震度{intensityLabel ?? "?"}";
+                earthquakeAlertText.text = ev != null
+                    ? $"地震発生！ 震央：{ev.epicenter}　M{ev.magnitude}\nあなたの地域の震度：{intensityLabel ?? "?"}"
+                    : "地震発生！";
                 earthquakeAlertText.gameObject.SetActive(true);
             }
 
-            if (intensityMapText != null && ev != null)
+            if (intensityMapView != null && ev != null)
             {
-                intensityMapText.text = BuildIntensityMapText(ev);
-                intensityMapText.gameObject.SetActive(true);
+                intensityMapView.SetIntensities(ev.intensities);
             }
 
             yield return new WaitForSeconds(earthquakeAlertDuration);
 
             if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
-            if (intensityMapText != null) intensityMapText.gameObject.SetActive(false);
+            if (intensityMapView != null) intensityMapView.ClearAll();
             earthquakeAlertCoroutine = null;
-        }
-
-        // A simple text-based "intensity map": every affected prefecture,
-        // colored and sorted by how strong the shaking was there.
-        private string BuildIntensityMapText(EarthquakeEvent ev)
-        {
-            var entries = new List<(string pref, string intensity, int rank)>();
-            foreach (var kv in ev.intensities)
-            {
-                entries.Add((kv.Key, kv.Value, IntensityScale.ToRank(kv.Value)));
-            }
-            entries.Sort((a, b) => b.rank.CompareTo(a.rank));
-
-            var sb = new StringBuilder();
-            sb.AppendLine($"震央：{ev.epicenter}　M{ev.magnitude}");
-            foreach (var e in entries)
-            {
-                string hex = IntensityScale.GetColorHex(e.intensity);
-                sb.AppendLine($"<color=#{hex}>{e.pref}：震度{e.intensity}</color>");
-            }
-            return sb.ToString();
         }
 
         private void EndRound()
