@@ -1,155 +1,98 @@
-# 日本地震サバイバルゲーム
+# 日本地震サバイバル（積み木タワー版）
 
-過去の地震データを時系列で再現しながら、都道府県を移動して生き残るサバイバルゲーム。
-このリポジトリは **Phase 1（プロトタイプ）** の実装です。
+実際に発生した地震データを時系列で再現しながら、都道府県を移動し、
+積み木を積み上げていくゲーム。1年（360日）を生き延びた時点で、
+残っている積み木の数と形からスコアが決まる。
 
-Phase 1 で実装済みの範囲：
+## ゲームの流れ
 
-1. 都道府県データの読み込み（`Assets/Resources/Data/prefectures.json`）
-2. プレイヤーの現在地表示・隣接県への移動（10日に1回）
-3. ゲーム内日付を1日進める
-4. 仮の地震データの読み込み（`Assets/Resources/Data/earthquakes.json`）
-5. プレイヤーがいる都道府県の震度判定（**震央ではなく観測震度で判定**）
-6. 震度5弱以上でGAME OVER
-7. 生存日数の表示
-8. リスタート
+1. 都道府県を選んで移動しながら（10日に1回移動可能）暮らす
+2. 毎日、**四角・三角・丸**から形を選び、土台上の位置を指定して「積む」＝1日が進む
+3. その日または後日、プレイヤーのいる都道府県で地震が観測されると、
+   **震央ではなく観測震度に応じて土台が揺れ**、積み木が崩れて落ちることがある
+   （震度が高いほど揺れが大きい）
+4. 360日（1年）経過するとラウンド終了。残った積み木の合計スコアを表示
+   - スコアは角が少ない形ほど高得点：丸(10点) > 三角(6点) > 四角(3点)
+     （角が少ない＝不安定でバランスを取りにくいほど高得点）
+5. リスタートで最初から（開始年は2000〜2024年からランダムに選ばれる）
 
-見た目（地図イラストなど）よりゲームシステムを優先しており、都道府県は
-ボタンの一覧として表示されます（クリックで移動）。
+占い師が数日以内に発生する地震の方角を曖昧に予言してくれる（完全な予知ではない）。
 
 ## 1. 必要なUnity設定
 
-- Unity Editor 2022.3 LTS 系（`ProjectSettings/ProjectVersion.txt` に記載のバージョン、または近いLTS）
-- Unity Hub でこのフォルダを「プロジェクトを開く」から開く
-- 初回起動時にパッケージが自動でインポートされます（`Packages/manifest.json` 参照）
+- Unity Editor 2022.3 LTS 系（`ProjectSettings/ProjectVersion.txt` に記載のバージョン）
+- Unity Hub でこのフォルダを開く（初回はパッケージ解決に時間がかかる）
 
 ## 2. フォルダ構成
 
 ```
 Assets/
+├── Editor/
+│   └── SceneBuilder.cs       … MainSceneをコードから自動生成するツール
 ├── Scripts/
-│   ├── GameManager.cs        … 日付・ゲーム状態・GAME OVER判定を統括
-│   ├── PlayerManager.cs      … プレイヤー位置・隣接県・移動クールダウン
+│   ├── GameManager.cs        … 日付・ラウンド進行・UI更新を統括
+│   ├── PlayerManager.cs      … プレイヤー位置・隣接県・移動クールダウン・座標
 │   ├── EarthquakeManager.cs  … 地震データの読み込みと日付照合
 │   ├── MapManager.cs         … 都道府県ボタンの生成と表示更新
-│   ├── Prefecture.cs         … 都道府県データ用クラス
-│   ├── EarthquakeData.cs     … 地震イベント用クラス・震度スケール変換
+│   ├── FortuneTeller.cs      … 占い師（未来の地震データを曖昧にヒント化）
+│   ├── BlockTowerManager.cs  … 積み木タワーの物理演算・揺れ・スコア集計
+│   ├── Block.cs              … 積み木1個分のコンポーネント
+│   ├── BlockShape.cs         … 形の種類・角の数・スコアのテーブル
+│   ├── ShapeMeshFactory.cs   … 四角/三角/丸のメッシュとコライダーを生成
+│   ├── Prefecture.cs / EarthquakeData.cs … データ用クラス
 │   └── MiniJSON.cs           … 辞書を含むJSONを読むための最小JSONパーサ
-├── Resources/
-│   └── Data/
-│       ├── prefectures.json  … 都道府県の隣接関係
-│       └── earthquakes.json  … 仮の地震データ（10〜20件）
-└── Scenes/
-    └── MainScene.unity（後述の手順で作成）
+├── Resources/Data/
+│   ├── prefectures.json      … 都道府県の隣接関係・緯度経度
+│   └── earthquakes.json      … 2000〜2024年に実際に発生した主要地震（約20件）
+└── MainScene.unity           … SceneBuilderで自動生成されるシーン
 ```
 
-データ（`Resources/Data/`）とロジック（`Scripts/`）は分離されており、
-将来 `earthquakes.json` を気象庁の実データに差し替えても、
-スクリプト側の変更は基本的に不要です。
+データ（`Resources/Data/`）とロジック（`Scripts/`）は分離されているので、
+`earthquakes.json` を差し替えるだけでデータの追加・修正ができる。
 
-> **なぜ Resources フォルダに入れる？**
-> Unity は `Resources.Load` を使うと、エディタでもビルド後（WebGL含む）でも
-> 同じコードでJSONファイルを読み込めます。仕様書のフォルダ例では
-> `Data/` を独立させていますが、実行時に読み込めるようにするため
-> `Assets/Resources/Data/` に配置しています。中身の分離という意図は
-> 保たれています。
+## 3. シーンの作り方（SceneBuilderを使う）
 
-## 3. シーンの作成手順（初回のみ）
+シーンは手作業ではなく、Editor拡張スクリプトで自動生成する
+（手動GUI操作は設定ミスが起きやすいため）。
 
-Unity Editor で以下を行います。
+1. Unity Editorで `Assets/MainScene.unity` を開く
+2. **再生を停止した状態**で、上部メニューの
+   **`Earthquake Game` > `Build Main Scene`** を実行する
+3. Consoleに `SceneBuilder: MainScene built and saved successfully.` と
+   出れば成功（Canvas・UI・積み木タワー・マネージャー一式が生成され、
+   シーンとして保存される）
 
-### 3-1. シーンを作成
+スクリプトを変更してシーンの構造やUIレイアウトを変えたい場合は
+`Assets/Editor/SceneBuilder.cs` を編集し、もう一度このメニューを実行する。
 
-1. `Assets/Scenes` を右クリック → `Create > Scene` → 名前を `MainScene` にする
-2. ダブルクリックして開く
+## 4. 操作方法
 
-### 3-2. Canvas とUI要素を作成
+- 画面下部の「四角」「三角」「丸」ボタンで積む形を選ぶ
+- スライダーで土台上の位置を決める（赤い矢印が落下位置のプレビュー）
+- 「積む（次の日へ）」を押すと積み木が落ちてきて積まれ、1日進む
+- 都道府県ボタン一覧から、移動可能（10日ごと）な隣接県をクリックして移動できる
+- 360日経過すると結果画面が表示される
 
-1. Hierarchy を右クリック → `UI > Canvas` を作成（`EventSystem` も自動生成されます）
-2. Canvas の下に、以下の `UI > Text` を作成し、名前を分かりやすく変更する
-   - `DateText`（例：「日付：2000年1月1日」）
-   - `SurvivalDaysText`（例：「生存日数：0日」）
-   - `CurrentPrefectureText`（例：「現在地：東京都」）
-   - `NextMoveText`（例：「次回移動可能：あと10日」）
-   - `LatestEarthquakeText`（例：「最新の地震：なし」、複数行なので少し大きめのRect Transformにする）
-3. Canvas の下に `UI > Button` を作成し、名前を `AdvanceDayButton` にする。子の Text を「次の日へ」にする
-4. Canvas の下に空の `GameObject` を作成し、`GameOverPanel` という名前にする
-   - この中に `UI > Text` を追加し「GAME OVER」などと表示する
-   - Inspector 右上の有効化チェックボックスを外し、非アクティブにしておく（ゲーム開始時は非表示）
+## 5. 地震データについて
 
-### 3-3. 都道府県ボタン一覧（MapManager用）
+`Assets/Resources/Data/earthquakes.json` には、2000〜2024年に実際に
+発生した地震のうち、特に規模が大きい・被害が広範囲だったものを
+約20件収録している（気象庁の震度データベースを参考に、公表されている
+記録に基づく概数）。
 
-1. Canvas の下に空の `GameObject` を作成し `ButtonContainer` という名前にする
-2. `ButtonContainer` に `Grid Layout Group` コンポーネントを追加する（Cell Size は 100x40 程度）
-3. `ButtonContainer` の下に `UI > Button` を1つ作成し、名前を `PrefectureButtonPrefab` にする
-4. `PrefectureButtonPrefab` を `Assets/Resources` などにドラッグしてプレハブ化した後、
-   Hierarchy 上のオブジェクトは削除してよい（プレハブだけ残す）
-   - あるいはシーン上に残したまま非アクティブにしてプレハブ参照用にしてもよい
+- 気象庁 震度データベース: https://www.data.jma.go.jp/eqev/data/bulletin/shindo.html
+- 精密な数値（正確な緯度経度・詳細な観測点別震度など）が必要な場合は、
+  上記データベースから該当地震を検索し、`intensities` を実測値に更新することを推奨する
+- 期間や件数を増やす場合も、既存のJSON形式（`date`/`time`/`epicenter`/
+  `latitude`/`longitude`/`magnitude`/`intensities`）にそのまま追加すればよい
 
-### 3-4. マネージャー用GameObjectを作成
+実際の災害（東日本大震災など）を題材としているため、死者数などをスコア化
+する表現は避けている。ゲーム内の結果表示も「GAME OVER」ではなく
+「1年間、生き延びました」という形にしている。
 
-1. 空の `GameObject` を3つ作成し、それぞれ名前を付ける：
-   - `GameManager`
-   - `PlayerManager`
-   - `EarthquakeManager`
-   - `MapManager`
-2. それぞれに対応するスクリプトをアタッチする
-   - `GameManager` オブジェクト → `GameManager.cs`
-   - `PlayerManager` オブジェクト → `PlayerManager.cs`
-   - `EarthquakeManager` オブジェクト → `EarthquakeManager.cs`
-   - `MapManager` オブジェクト → `MapManager.cs`
+## 6. 今後の拡張候補
 
-### 3-5. Inspector で参照を接続
-
-`GameManager` の Inspector で、以下のフィールドにドラッグ＆ドロップで接続する：
-
-- `Player Manager` → `PlayerManager` オブジェクト
-- `Earthquake Manager` → `EarthquakeManager` オブジェクト
-- `Map Manager` → `MapManager` オブジェクト
-- `Date Text` / `Survival Days Text` / `Current Prefecture Text` / `Next Move Text` / `Latest Earthquake Text` → 対応するTextオブジェクト
-- `Game Over Panel` → `GameOverPanel`
-- `Advance Day Button` → `AdvanceDayButton`
-
-`MapManager` の Inspector で：
-
-- `Prefecture Button Prefab` → 3-3で作成した `PrefectureButtonPrefab`
-- `Button Container` → `ButtonContainer`
-
-`AdvanceDayButton` の `OnClick()` に `GameManager.OnAdvanceDayClicked()` を追加する
-（Button の Inspector → `On Click ()` → `+` → `GameManager` オブジェクトをドラッグ →
-関数選択で `GameManager > OnAdvanceDayClicked` を選ぶ）。
-
-GameOverPanel内に「リスタート」ボタンを追加する場合は、その `OnClick()` に
-`GameManager.OnRestartClicked()` を割り当てる。
-
-## 4. 動作確認方法
-
-1. Unity Editor 上部の再生ボタンで実行する
-2. 画面に日付・生存日数・現在地・次回移動可能日数・最新の地震欄が表示される
-3. `ButtonContainer` に都道府県ボタンが並び、現在地はオレンジ、
-   移動可能な隣接県は緑で表示される（`MapManager.Refresh` の色設定）
-4. 「次の日へ」ボタンを押すと日付が1日進み、`earthquakes.json` にその日付の
-   データがあれば最新の地震欄に表示される
-5. プレイヤーのいる都道府県で震度5弱以上を観測すると、
-   `GameOverPanel` が表示され、「次の日へ」ボタンが押せなくなる
-6. リスタートボタン（実装していれば）でゲーム状態が初期化される
-
-`Assets/Resources/Data/earthquakes.json` の日付・震度を編集して、
-狙った条件で GAME OVER になるか確認すると動作確認がしやすい。
-
-## 5. 今後の拡張（Phase 2以降）
-
-- 占い師システム（`EarthquakeManager.PeekFutureEarthquake` を利用）
-- スコア・生存日数のランキング
-- 気象庁の実データへの差し替え（`earthquakes.json` の形式はそのまま拡張可能）
-- 日本地図の見た目の改善（都道府県ボタン一覧 → 実際の地図上での配置へ）
+- 地震データの追加・詳細化（観測点単位のデータ取り込み）
+- タイトル画面・効果音・BGM・揺れ演出の強化
+- 積み木の形のバリエーション追加
 - WebGLビルドを作成し、unityroomへアップロード
-
-## 6. ライセンス・データについて
-
-`Assets/Resources/Data/earthquakes.json` は Phase 1 用の架空データです。
-実データに差し替える際は気象庁の震度データベースの利用条件を確認してください。
-（https://www.data.jma.go.jp/eqev/data/bulletin/shindo.html）
-
-実際の災害（東日本大震災など）を題材とするため、死者数などをスコア化する
-表現は避け、GAME OVER画面などの表現にも配慮すること。

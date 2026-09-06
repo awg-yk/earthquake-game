@@ -25,8 +25,9 @@ namespace EarthquakeGame
         public BlockTowerManager blockTowerManager;
 
         [Header("Config")]
-        [Tooltip("The in-game calendar starts on this date.")]
-        public string startDateString = "2000-01-01";
+        [Tooltip("Each new game starts on January 1st of a random year in this range, so different playthroughs sample different real earthquakes.")]
+        public int minStartYear = 2000;
+        public int maxStartYear = 2024;
         public string startingPrefecture = "東京都";
 
         [Tooltip("Length of one round, in in-game days.")]
@@ -82,7 +83,8 @@ namespace EarthquakeGame
             playerManager.LoadData();
             earthquakeManager.LoadData();
 
-            currentDate = DateTime.Parse(startDateString);
+            int year = UnityEngine.Random.Range(minStartYear, maxStartYear + 1);
+            currentDate = new DateTime(year, 1, 1);
             survivalDays = 0;
             isRoundOver = false;
             selectedShape = BlockShape.Square;
