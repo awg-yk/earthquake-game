@@ -11,7 +11,7 @@ namespace EarthquakeGame
         public string dataResourcePath = "Data/prefectures";
 
         [Tooltip("How many days must pass between moves.")]
-        public int moveIntervalDays = 10;
+        public int moveIntervalDays = 1;
 
         public string CurrentPrefecture { get; private set; }
         public int DaysUntilNextMove { get; private set; }

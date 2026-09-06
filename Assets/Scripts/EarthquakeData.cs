@@ -49,17 +49,6 @@ namespace EarthquakeGame
             return ToRank(intensity) >= 5;
         }
 
-        // Collapses the rank scale down to the plain shindo number used for
-        // the block score multiplier (5弱/5強 -> 5, 6弱/6強 -> 6, 7 -> 7).
-        // Below shindo 5 there is no multiplier (returns 0).
-        public static int GetShindoNumberFromRank(int rank)
-        {
-            if (rank >= 9) return 7;
-            if (rank >= 7) return 6;
-            if (rank >= 5) return 5;
-            return 0;
-        }
-
         // Hex color (no '#') used to render this intensity in the
         // earthquake intensity map/legend, roughly following the color
         // scheme used on real JMA intensity maps.

@@ -25,6 +25,7 @@ public static class SceneBuilder
         }
 
         Camera mainCamera = CreateCamera();
+        var (earthquakeSoundPlayer, fortuneChimePlayer, bgmPlayer) = CreateAudioPlayers();
         CreateLight();
         Rigidbody2D basePlatform = CreateBasePlatform();
 
@@ -36,19 +37,24 @@ public static class SceneBuilder
         Text survivalDaysText = CreateTextAnchored(canvas.transform, "SurvivalDaysText", topLeft, topLeft, 20, -55, 380, 40, 22, "経過日数：0/360日");
         Text currentPrefectureText = CreateTextAnchored(canvas.transform, "CurrentPrefectureText", topLeft, topLeft, 20, -90, 380, 40, 22, "現在地：東京都");
         Text nextMoveText = CreateTextAnchored(canvas.transform, "NextMoveText", topLeft, topLeft, 20, -125, 380, 40, 22, "次回移動可能：あと10日");
-        Text scoreText = CreateTextAnchored(canvas.transform, "ScoreText", topLeft, topLeft, 20, -160, 380, 40, 22, "現在のスコア：0点（積み木0個）");
-        Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topLeft, topLeft, 20, -200, 380, 140, 18, "最新の地震：なし");
-        Text fortuneText = CreateTextAnchored(canvas.transform, "FortuneText", topLeft, topLeft, 20, -350, 380, 90, 16, "占い師：…");
+        Text scoreText = CreateTextAnchored(canvas.transform, "ScoreText", topLeft, topLeft, 20, -160, 380, 30, 20, "現在のスコア：0点（個数＋高さ）");
+        Text countStatsText = CreateTextAnchored(canvas.transform, "CountStatsText", topLeft, topLeft, 20, -192, 380, 26, 16, "積み木の数：現在0個／最高0個");
+        Text heightStatsText = CreateTextAnchored(canvas.transform, "HeightStatsText", topLeft, topLeft, 20, -220, 380, 26, 16, "高さ：現在0.0m／最高0.0m");
+        Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topLeft, topLeft, 20, -256, 380, 140, 18, "最新の地震：なし");
+        Text fortuneText = CreateTextAnchored(canvas.transform, "FortuneText", topLeft, topLeft, 20, -404, 380, 90, 16, "占い師：…");
 
         GameObject buttonContainer = CreateButtonContainer(canvas.transform);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
 
         // --- Block placement: shape is random, player only rotates + aims ---
-        Text nextShapeInfoText = CreateText(canvas.transform, "NextShapeInfoText", 230, -260, 380, 30, 18, "次のブロック");
+        // Kept on the left/center-bottom of the screen (not the right side)
+        // so it never overlaps the intensity map panel, which lives on the
+        // right (see CreateIntensityMapPanel).
+        Text nextShapeInfoText = CreateText(canvas.transform, "NextShapeInfoText", -320, -260, 380, 30, 18, "次のブロック");
         nextShapeInfoText.alignment = TextAnchor.MiddleCenter;
-        Button rotateLeftButton = CreateButton(canvas.transform, "RotateLeftButton", 140, -300, 90, 50, "⟲");
-        Button rotateRightButton = CreateButton(canvas.transform, "RotateRightButton", 320, -300, 90, 50, "⟳");
-        Text placementHintText = CreateText(canvas.transform, "PlacementHintText", 230, -230, 380, 30, 16, "回転(Q/E)して、土台をクリックすると積めます");
+        Button rotateLeftButton = CreateButton(canvas.transform, "RotateLeftButton", -410, -300, 90, 50, "⟲");
+        Button rotateRightButton = CreateButton(canvas.transform, "RotateRightButton", -230, -300, 90, 50, "⟳");
+        Text placementHintText = CreateText(canvas.transform, "PlacementHintText", -320, -230, 380, 30, 16, "回転(Q/E)して、土台をクリックすると積めます");
         placementHintText.alignment = TextAnchor.MiddleCenter;
         Transform dropIndicator = CreateDropIndicator();
         GameObject shapePreview = new GameObject("ShapePreview");
@@ -98,14 +104,16 @@ public static class SceneBuilder
         gameManager.latestEarthquakeText = latestEarthquakeText;
         gameManager.fortuneText = fortuneText;
         gameManager.scoreText = scoreText;
+        gameManager.countStatsText = countStatsText;
+        gameManager.heightStatsText = heightStatsText;
         gameManager.roundEndPanel = roundEndPanel;
         gameManager.roundEndScoreText = roundEndScoreText;
         gameManager.dropIndicator = dropIndicator;
         gameManager.shapePreview = shapePreview;
         gameManager.cameraShaker = mainCamera.GetComponent<CameraShaker>();
-        gameManager.earthquakeSoundPlayer = mainCamera.GetComponent<EarthquakeSoundPlayer>();
-        gameManager.fortuneChimePlayer = mainCamera.GetComponent<FortuneChimePlayer>();
-        gameManager.bgmPlayer = mainCamera.GetComponent<BGMPlayer>();
+        gameManager.earthquakeSoundPlayer = earthquakeSoundPlayer;
+        gameManager.fortuneChimePlayer = fortuneChimePlayer;
+        gameManager.bgmPlayer = bgmPlayer;
         gameManager.earthquakeAlertText = earthquakeAlertText;
         gameManager.intensityMapView = intensityMapView;
         gameManager.titleScreenPanel = titleScreenPanel;
@@ -144,10 +152,25 @@ public static class SceneBuilder
         cam.backgroundColor = new Color(0.75f, 0.85f, 0.95f);
         camObj.AddComponent<AudioListener>();
         camObj.AddComponent<CameraShaker>();
-        camObj.AddComponent<EarthquakeSoundPlayer>();
-        camObj.AddComponent<FortuneChimePlayer>();
-        camObj.AddComponent<BGMPlayer>();
         return cam;
+    }
+
+    // Each audio player gets its own GameObject/AudioSource. Putting them
+    // all on one object made every script's Awake() find and reuse the
+    // SAME AudioSource (GetComponent finds whichever was added first),
+    // which caused the BGM to get stepped on by one-shot sounds.
+    private static (EarthquakeSoundPlayer, FortuneChimePlayer, BGMPlayer) CreateAudioPlayers()
+    {
+        GameObject earthquakeSoundObj = new GameObject("EarthquakeSoundPlayer");
+        var earthquakeSoundPlayer = earthquakeSoundObj.AddComponent<EarthquakeSoundPlayer>();
+
+        GameObject fortuneChimeObj = new GameObject("FortuneChimePlayer");
+        var fortuneChimePlayer = fortuneChimeObj.AddComponent<FortuneChimePlayer>();
+
+        GameObject bgmObj = new GameObject("BGMPlayer");
+        var bgmPlayer = bgmObj.AddComponent<BGMPlayer>();
+
+        return (earthquakeSoundPlayer, fortuneChimePlayer, bgmPlayer);
     }
 
     private static void CreateLight()
@@ -300,19 +323,19 @@ public static class SceneBuilder
     private static GameObject CreateRoundEndPanel(Transform parent, out Text scoreText, out Button restartButton)
     {
         GameObject panel = new GameObject("RoundEndPanel");
-        SetupRect(panel, parent, 0, 0, 500, 320);
+        SetupRect(panel, parent, 0, 0, 520, 400);
         Image panelImage = panel.AddComponent<Image>();
         panelImage.color = new Color(0, 0, 0, 0.82f);
 
-        Text titleText = CreateText(panel.transform, "RoundEndTitleText", 0, 100, 460, 60, 32, "今年の記録");
+        Text titleText = CreateText(panel.transform, "RoundEndTitleText", 0, 150, 460, 60, 32, "今年の記録");
         titleText.alignment = TextAnchor.MiddleCenter;
         titleText.color = Color.white;
 
-        scoreText = CreateText(panel.transform, "RoundEndScoreText", 0, 10, 460, 130, 22, "");
+        scoreText = CreateText(panel.transform, "RoundEndScoreText", 0, 20, 460, 180, 22, "");
         scoreText.alignment = TextAnchor.MiddleCenter;
         scoreText.color = Color.white;
 
-        restartButton = CreateButton(panel.transform, "RestartButton", 0, -110, 200, 60, "リスタート");
+        restartButton = CreateButton(panel.transform, "RestartButton", 0, -160, 200, 60, "リスタート");
 
         return panel;
     }
@@ -364,23 +387,74 @@ public static class SceneBuilder
     // per prefecture, positioned by projecting real lat/lon (no map artwork
     // needed - the dots alone trace roughly the shape of Japan). Markers
     // light up by intensity via IntensityMapView.SetIntensities().
+    private static readonly (string label, string hex)[] IntensityLegendEntries =
+    {
+        ("3/4", "FFC107"),
+        ("5弱/5強", "FF9800"),
+        ("6弱/6強", "F44336"),
+        ("7", "9C27B0"),
+    };
+
+    // Placed in the vertical middle of the right-hand column - below the
+    // prefecture button list, above the shape-placement controls at the
+    // bottom - so it never overlaps either.
     private static IntensityMapView CreateIntensityMapPanel(Transform parent)
     {
         GameObject panel = new GameObject("IntensityMapPanel");
-        RectTransform panelRect = SetupRectAnchored(panel, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -420, 300, 300);
+        RectTransform panelRect = SetupRectAnchored(panel, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -430, 280, 260);
         Image panelImage = panel.AddComponent<Image>();
         panelImage.color = new Color(0.93f, 0.93f, 0.95f);
 
-        Text label = CreateTextAnchored(panel.transform, "IntensityMapLabel", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -4, 280, 24, 14, "震度マップ");
+        Text label = CreateTextAnchored(panel.transform, "IntensityMapLabel", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -4, 260, 22, 14, "震度マップ");
         label.alignment = TextAnchor.UpperCenter;
         label.color = Color.black;
 
         GameObject mapAreaObj = new GameObject("MapArea");
-        RectTransform mapAreaRect = SetupRectAnchored(mapAreaObj, panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -14, 280, 264);
+        RectTransform mapAreaRect = SetupRectAnchored(mapAreaObj, panel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -28, 260, 180);
 
         IntensityMapView view = panel.AddComponent<IntensityMapView>();
         view.mapArea = mapAreaRect;
+
+        CreateIntensityLegend(panel.transform);
+
         return view;
+    }
+
+    // A small color-swatch + label row along the bottom of the map panel,
+    // so the color coding (green/amber/orange/red/purple) is explained.
+    private static void CreateIntensityLegend(Transform panelTransform)
+    {
+        GameObject legendRow = new GameObject("IntensityLegend");
+        RectTransform legendRect = SetupRectAnchored(legendRow, panelTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), 0, 6, 260, 40);
+
+        var grid = legendRow.AddComponent<GridLayoutGroup>();
+        grid.cellSize = new Vector2(63, 36);
+        grid.spacing = new Vector2(2, 0);
+        grid.childAlignment = TextAnchor.MiddleCenter;
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = 4;
+
+        foreach (var (label, hex) in IntensityLegendEntries)
+        {
+            GameObject entry = new GameObject($"Legend_{label}");
+            var entryRect = entry.AddComponent<RectTransform>();
+            entryRect.SetParent(legendRect, false);
+
+            GameObject swatch = new GameObject("Swatch");
+            var swatchRect = swatch.AddComponent<RectTransform>();
+            swatchRect.SetParent(entry.transform, false);
+            swatchRect.anchorMin = new Vector2(0.5f, 1f);
+            swatchRect.anchorMax = new Vector2(0.5f, 1f);
+            swatchRect.pivot = new Vector2(0.5f, 1f);
+            swatchRect.anchoredPosition = Vector2.zero;
+            swatchRect.sizeDelta = new Vector2(16, 16);
+            var swatchImage = swatch.AddComponent<Image>();
+            if (ColorUtility.TryParseHtmlString("#" + hex, out var color)) swatchImage.color = color;
+
+            Text labelText = CreateTextAnchored(entry.transform, "Label", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -18, 62, 18, 11, label);
+            labelText.alignment = TextAnchor.UpperCenter;
+            labelText.color = Color.black;
+        }
     }
 
     // A full-screen overlay that appears whenever the fortune teller has a

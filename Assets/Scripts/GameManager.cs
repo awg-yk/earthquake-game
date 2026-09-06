@@ -42,6 +42,9 @@ namespace EarthquakeGame
         [Tooltip("The fortune teller gives a fresh precise forecast every this many days.")]
         public int forecastIntervalDays = 10;
 
+        [Tooltip("Minimum felt intensity rank (3 = shindo 3) that actually shakes the tower - matches the real-world threshold where people notice shaking.")]
+        public int minFeltRankToShake = 3;
+
         [Header("UI (Text can be swapped for TMP_Text)")]
         public Text dateText;
         public Text survivalDaysText;
@@ -50,6 +53,8 @@ namespace EarthquakeGame
         public Text latestEarthquakeText;
         public Text fortuneText;
         public Text scoreText;
+        public Text heightStatsText;
+        public Text countStatsText;
         public GameObject roundEndPanel;
         public Text roundEndScoreText;
         public Transform dropIndicator;
@@ -160,13 +165,13 @@ namespace EarthquakeGame
         // longer chooses a shape - only its rotation and drop position).
         private void PickNextShape()
         {
-            selectedSize = blockTowerManager != null ? blockTowerManager.RollRandomSize() : Vector2.one * 0.6f;
+            selectedSize = blockTowerManager != null ? blockTowerManager.GetBlockSize() : Vector2.one * 0.6f;
             selectedRotation = 0f;
             RebuildShapePreview();
 
             if (nextShapeInfoText != null)
             {
-                nextShapeInfoText.text = $"次のブロック（{BlockShapeInfo.GetScore(BlockShape.Rectangle)}点）";
+                nextShapeInfoText.text = "次のブロック";
             }
         }
 
@@ -245,7 +250,12 @@ namespace EarthquakeGame
                 }
             }
 
-            if (playerFeltRank > 0)
+            // Real-world threshold: people generally don't notice shaking
+            // below shindo 3, so neither the tower nor the camera/sound
+            // react below that, even if the JSON technically recorded a
+            // weaker intensity (1/2) for this prefecture.
+            bool feltShake = playerFeltRank >= minFeltRankToShake;
+            if (feltShake)
             {
                 if (blockTowerManager != null) blockTowerManager.Shake(playerFeltRank);
                 if (cameraShaker != null) cameraShaker.Shake(playerFeltRank);
@@ -255,7 +265,7 @@ namespace EarthquakeGame
             if (mostNotableEvent != null)
             {
                 if (earthquakeAlertCoroutine != null) StopCoroutine(earthquakeAlertCoroutine);
-                earthquakeAlertCoroutine = StartCoroutine(ShowEarthquakeAlert(mostNotableEvent, playerFeltRank));
+                earthquakeAlertCoroutine = StartCoroutine(ShowEarthquakeAlert(mostNotableEvent, playerEvent, feltShake));
             }
 
             playerManager.AdvanceOneDay();
@@ -274,23 +284,27 @@ namespace EarthquakeGame
             }
         }
 
-        private IEnumerator ShowEarthquakeAlert(EarthquakeEvent ev, int playerFeltRank)
+        private IEnumerator ShowEarthquakeAlert(EarthquakeEvent displayEvent, EarthquakeEvent playerEvent, bool feltShake)
         {
-            float duration = earthquakeAlertDuration + playerFeltRank * 0.3f;
+            float duration = earthquakeAlertDuration + (feltShake ? 1f : 0f);
 
             if (earthquakeAlertText != null)
             {
-                string intensityLabel = ev.GetIntensityFor(playerManager.CurrentPrefecture);
-                string yourAreaLine = intensityLabel != null
+                // Use playerEvent (the one that actually hit the player's
+                // prefecture) for the "your area" line, never displayEvent -
+                // they can be different earthquakes on the same day, and
+                // mixing them up caused the text to contradict the shake.
+                string intensityLabel = playerEvent?.GetIntensityFor(playerManager.CurrentPrefecture);
+                string yourAreaLine = feltShake && intensityLabel != null
                     ? $"あなたの地域の震度：{intensityLabel}"
                     : "あなたの地域では揺れは観測されませんでした";
-                earthquakeAlertText.text = $"地震発生！ 震央：{ev.epicenter}　M{ev.magnitude}\n{yourAreaLine}";
+                earthquakeAlertText.text = $"地震発生！ 震央：{displayEvent.epicenter}　M{displayEvent.magnitude}\n{yourAreaLine}";
                 earthquakeAlertText.gameObject.SetActive(true);
             }
 
             if (intensityMapView != null)
             {
-                intensityMapView.SetIntensities(ev.intensities);
+                intensityMapView.SetIntensities(displayEvent.intensities);
             }
 
             yield return new WaitForSeconds(duration);
@@ -340,13 +354,19 @@ namespace EarthquakeGame
         {
             isRoundOver = true;
             int finalScore = blockTowerManager != null ? blockTowerManager.GetScore() : 0;
-
+            int finalCount = blockTowerManager != null ? blockTowerManager.AliveBlockCount : 0;
+            int maxCount = blockTowerManager != null ? blockTowerManager.MaxBlockCountReached : 0;
+            float finalHeight = blockTowerManager != null ? blockTowerManager.CurrentHeight : 0f;
             float maxHeight = blockTowerManager != null ? blockTowerManager.MaxHeightReached : 0f;
 
             if (roundEndPanel != null) roundEndPanel.SetActive(true);
             if (roundEndScoreText != null)
             {
-                roundEndScoreText.text = $"1年間、生き延びました。\n最終スコア：{finalScore}点\n残った積み木：{(blockTowerManager != null ? blockTowerManager.AliveBlockCount : 0)}個\n最高到達高さ：{maxHeight:0.0}m";
+                roundEndScoreText.text =
+                    $"1年間、生き延びました。\n" +
+                    $"最終スコア：{finalScore}点（個数＋高さ）\n" +
+                    $"積み木の数：{finalCount}個（最高{maxCount}個）\n" +
+                    $"高さ：{finalHeight:0.0}m（最高{maxHeight:0.0}m）";
             }
         }
 
@@ -387,9 +407,20 @@ namespace EarthquakeGame
                 fortuneText.text = currentForecast;
             }
 
-            if (scoreText != null && blockTowerManager != null)
+            if (blockTowerManager != null)
             {
-                scoreText.text = $"現在のスコア：{blockTowerManager.GetScore()}点（積み木{blockTowerManager.AliveBlockCount}個）";
+                if (scoreText != null)
+                {
+                    scoreText.text = $"現在のスコア：{blockTowerManager.GetScore()}点（個数＋高さ）";
+                }
+                if (countStatsText != null)
+                {
+                    countStatsText.text = $"積み木の数：現在{blockTowerManager.AliveBlockCount}個／最高{blockTowerManager.MaxBlockCountReached}個";
+                }
+                if (heightStatsText != null)
+                {
+                    heightStatsText.text = $"高さ：現在{blockTowerManager.CurrentHeight:0.0}m／最高{blockTowerManager.MaxHeightReached:0.0}m";
+                }
             }
         }
 

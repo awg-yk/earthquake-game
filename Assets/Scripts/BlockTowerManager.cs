@@ -5,8 +5,8 @@ using UnityEngine;
 namespace EarthquakeGame
 {
     // Owns the physical block tower: placing new blocks, shaking the base
-    // when an earthquake hits the player's location, and scoring whatever
-    // is still standing at the end of the year.
+    // when an earthquake hits the player's location, and tracking the
+    // stats (block count, height) the score is built from.
     public class BlockTowerManager : MonoBehaviour
     {
         [Header("Base platform")]
@@ -16,13 +16,8 @@ namespace EarthquakeGame
         [Header("Block settings")]
         public float blockSize = 0.6f;
         public float spawnHeightMargin = 1.5f;
-        [Tooltip("Range of random elongation applied to each block's rectangle (area stays constant: width = blockSize*elongation, height = blockSize/elongation).")]
-        public float minElongation = 0.6f;
-        public float maxElongation = 1.8f;
-
-        // Highest the tower has ever reached above the base, tracked for the round-end height record.
-        private float maxHeightReached;
-        public float MaxHeightReached => maxHeightReached;
+        [Tooltip("Every block is this single elongated rectangle (area = blockSize squared, width = blockSize*elongation, height = blockSize/elongation). Only its rotation varies.")]
+        public float elongation = 1.4f;
 
         [Header("Shake settings")]
         [Tooltip("Screen/world units of shake amplitude per intensity rank point.")]
@@ -39,6 +34,8 @@ namespace EarthquakeGame
         private readonly List<Block> aliveBlocks = new List<Block>();
         private Vector3 basePlatformRestPosition;
         private Coroutine shakeCoroutine;
+        private float maxHeightReached;
+        private int maxBlockCountReached;
 
         void Awake()
         {
@@ -46,26 +43,25 @@ namespace EarthquakeGame
         }
 
         public int AliveBlockCount => aliveBlocks.Count;
+        public int MaxBlockCountReached => maxBlockCountReached;
+        public float MaxHeightReached => maxHeightReached;
+        public float CurrentHeight => GetCurrentTowerTopY() - GetBaseTopY();
 
         // Height at which the next block would be dropped, useful for
         // showing the player a "landing here" preview before they commit.
         public float GetNextSpawnY() => GetCurrentTowerTopY() + spawnHeightMargin;
 
         // Keeps a placement X position within the base platform's bounds.
-        // Uses the widest a block can ever be (fully elongated) as the
-        // safety margin so an elongated block never hangs off the edge.
         public float ClampX(float xPosition)
         {
-            float margin = blockSize * maxElongation * 0.5f;
+            float margin = blockSize * elongation * 0.5f;
             return Mathf.Clamp(xPosition, -baseHalfWidth + margin, baseHalfWidth - margin);
         }
 
-        // Picks a random elongation for the next block, exposed so the
-        // preview (GameManager) can show the exact same rectangle the
-        // player is about to drop.
-        public Vector2 RollRandomSize()
+        // The single fixed block size, exposed so the preview (GameManager)
+        // can show the exact same rectangle the player is about to drop.
+        public Vector2 GetBlockSize()
         {
-            float elongation = Random.Range(minElongation, maxElongation);
             return new Vector2(blockSize * elongation, blockSize / elongation);
         }
 
@@ -88,21 +84,23 @@ namespace EarthquakeGame
             block.Setup(BlockShape.Rectangle);
 
             aliveBlocks.Add(block);
+            if (aliveBlocks.Count > maxBlockCountReached) maxBlockCountReached = aliveBlocks.Count;
             return block;
+        }
+
+        private float GetBaseTopY()
+        {
+            return baseRigidbody != null ? baseRigidbody.transform.position.y + 0.15f : 0f;
         }
 
         private float GetCurrentTowerTopY()
         {
-            float baseTop = baseRigidbody != null
-                ? baseRigidbody.transform.position.y + 0.15f
-                : 0f;
-
-            float highest = baseTop;
+            float highest = GetBaseTopY();
             foreach (var block in aliveBlocks)
             {
                 if (block == null) continue;
                 // Use the collider's world bounds (not a fixed blockSize)
-                // since blocks now have randomized, rotated rectangles.
+                // since blocks are rotated rectangles.
                 var collider = block.GetComponent<Collider2D>();
                 float top = collider != null ? collider.bounds.max.y : block.transform.position.y;
                 if (top > highest) highest = top;
@@ -121,11 +119,6 @@ namespace EarthquakeGame
 
         private IEnumerator ShakeRoutine(int intensityRank)
         {
-            // Snapshot who's standing before the shake, so we can tell
-            // afterwards who survived it (for the score multiplier) even
-            // though PlaceBlock/Update keep mutating aliveBlocks over time.
-            var blocksBeforeShake = new List<Block>(aliveBlocks);
-
             float amplitude = shakeAmplitudePerRank * intensityRank;
             float duration = baseShakeDuration + shakeDurationPerRank * intensityRank;
             float elapsed = 0f;
@@ -140,19 +133,6 @@ namespace EarthquakeGame
             }
 
             baseRigidbody.MovePosition(basePlatformRestPosition);
-
-            int shindoNumber = IntensityScale.GetShindoNumberFromRank(intensityRank);
-            if (shindoNumber >= 5)
-            {
-                foreach (var block in blocksBeforeShake)
-                {
-                    if (block != null && aliveBlocks.Contains(block))
-                    {
-                        block.ApplySurvivedShindo(shindoNumber);
-                    }
-                }
-            }
-
             shakeCoroutine = null;
         }
 
@@ -168,19 +148,15 @@ namespace EarthquakeGame
                 }
             }
 
-            float baseTop = baseRigidbody != null ? baseRigidbody.transform.position.y + 0.15f : 0f;
-            float currentHeight = GetCurrentTowerTopY() - baseTop;
+            float currentHeight = CurrentHeight;
             if (currentHeight > maxHeightReached) maxHeightReached = currentHeight;
         }
 
+        // Score = block count + tower height, added together (no intensity
+        // weighting) - simple and legible: taller and fuller both help.
         public int GetScore()
         {
-            int total = 0;
-            foreach (var block in aliveBlocks)
-            {
-                if (block != null) total += block.FinalScore;
-            }
-            return total;
+            return AliveBlockCount + Mathf.RoundToInt(CurrentHeight);
         }
 
         public void ClearAllBlocks()
@@ -191,6 +167,7 @@ namespace EarthquakeGame
             }
             aliveBlocks.Clear();
             maxHeightReached = 0f;
+            maxBlockCountReached = 0;
         }
     }
 }
