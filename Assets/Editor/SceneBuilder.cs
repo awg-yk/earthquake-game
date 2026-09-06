@@ -36,25 +36,29 @@ public static class SceneBuilder
         Text dateText = CreateTextAnchored(canvas.transform, "DateText", topLeft, topLeft, 20, -20, 380, 40, 22, "日付：2000年1月1日");
         Text survivalDaysText = CreateTextAnchored(canvas.transform, "SurvivalDaysText", topLeft, topLeft, 20, -55, 380, 40, 22, "経過日数：0/360日");
         Text currentPrefectureText = CreateTextAnchored(canvas.transform, "CurrentPrefectureText", topLeft, topLeft, 20, -90, 380, 40, 22, "現在地：東京都");
-        Text nextMoveText = CreateTextAnchored(canvas.transform, "NextMoveText", topLeft, topLeft, 20, -125, 380, 40, 22, "次回移動可能：あと10日");
-        Text scoreText = CreateTextAnchored(canvas.transform, "ScoreText", topLeft, topLeft, 20, -160, 380, 30, 20, "現在のスコア：0点（個数＋高さ）");
-        Text countStatsText = CreateTextAnchored(canvas.transform, "CountStatsText", topLeft, topLeft, 20, -192, 380, 26, 16, "積み木の数：現在0個／最高0個");
-        Text heightStatsText = CreateTextAnchored(canvas.transform, "HeightStatsText", topLeft, topLeft, 20, -220, 380, 26, 16, "高さ：現在0.0m／最高0.0m");
-        Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topLeft, topLeft, 20, -256, 380, 140, 18, "最新の地震：なし");
-        Text fortuneText = CreateTextAnchored(canvas.transform, "FortuneText", topLeft, topLeft, 20, -404, 380, 90, 16, "地震予報士：…");
+        Text scoreText = CreateTextAnchored(canvas.transform, "ScoreText", topLeft, topLeft, 20, -125, 380, 30, 20, "スコア：0点（個数＋高さ）");
+        Text countStatsText = CreateTextAnchored(canvas.transform, "CountStatsText", topLeft, topLeft, 20, -157, 380, 26, 16, "個数：現在0個／最高0個");
+        Text heightStatsText = CreateTextAnchored(canvas.transform, "HeightStatsText", topLeft, topLeft, 20, -185, 380, 26, 16, "高さ：現在0.0m／最高0.0m");
+        Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topLeft, topLeft, 20, -221, 380, 140, 18, "最新の地震：なし");
+        Text fortuneText = CreateTextAnchored(canvas.transform, "FortuneText", topLeft, topLeft, 20, -369, 380, 90, 16, "地震予報士：…");
+
+        // Persistent left-side map showing this month's forecasted warning
+        // areas (震度2以上), unlike the right-side one which only flashes
+        // briefly for earthquake alerts. Placed below the HUD text column.
+        IntensityMapView forecastMapView = CreateIntensityMapPanel(canvas.transform, "ForecastMapPanel", topLeft, topLeft, 20, -470, "今月の警戒マップ");
 
         GameObject buttonContainer = CreateButtonContainer(canvas.transform);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
 
         // --- Block placement: shape is random, player only rotates + aims ---
-        // Kept on the left/center-bottom of the screen (not the right side)
-        // so it never overlaps the intensity map panel, which lives on the
-        // right (see CreateIntensityMapPanel).
+        // The rotate buttons live in the bottom-right corner; only a short
+        // "回転（Q/E）" hint is shown (not the old full instructions).
         Text nextShapeInfoText = CreateText(canvas.transform, "NextShapeInfoText", -320, -260, 380, 30, 18, "次のブロック");
         nextShapeInfoText.alignment = TextAnchor.MiddleCenter;
-        Button rotateLeftButton = CreateButton(canvas.transform, "RotateLeftButton", -410, -300, 90, 50, "⟲");
-        Button rotateRightButton = CreateButton(canvas.transform, "RotateRightButton", -230, -300, 90, 50, "⟳");
-        Text placementHintText = CreateText(canvas.transform, "PlacementHintText", -320, -230, 380, 30, 16, "回転(Q/E)して、土台をクリックすると積めます");
+        Vector2 bottomRight = new Vector2(1f, 0f);
+        Button rotateLeftButton = CreateButtonAnchored(canvas.transform, "RotateLeftButton", bottomRight, bottomRight, -190, 70, 90, 50, "⟲");
+        Button rotateRightButton = CreateButtonAnchored(canvas.transform, "RotateRightButton", bottomRight, bottomRight, -90, 70, 90, 50, "⟳");
+        Text placementHintText = CreateTextAnchored(canvas.transform, "PlacementHintText", bottomRight, bottomRight, -190, 20, 180, 30, 16, "回転（Q/E）");
         placementHintText.alignment = TextAnchor.MiddleCenter;
         Transform dropIndicator = CreateDropIndicator();
         GameObject shapePreview = new GameObject("ShapePreview");
@@ -101,7 +105,6 @@ public static class SceneBuilder
         gameManager.dateText = dateText;
         gameManager.survivalDaysText = survivalDaysText;
         gameManager.currentPrefectureText = currentPrefectureText;
-        gameManager.nextMoveText = nextMoveText;
         gameManager.latestEarthquakeText = latestEarthquakeText;
         gameManager.fortuneText = fortuneText;
         gameManager.scoreText = scoreText;
@@ -117,6 +120,7 @@ public static class SceneBuilder
         gameManager.bgmPlayer = bgmPlayer;
         gameManager.earthquakeAlertText = earthquakeAlertText;
         gameManager.intensityMapView = intensityMapView;
+        gameManager.forecastMapView = forecastMapView;
         gameManager.titleScreenPanel = titleScreenPanel;
         gameManager.nextShapeInfoText = nextShapeInfoText;
         gameManager.fortuneAnimationPanel = fortuneAnimationPanel;
@@ -284,8 +288,13 @@ public static class SceneBuilder
 
     private static Button CreateButton(Transform parent, string name, float x, float y, float w, float h, string label)
     {
+        return CreateButtonAnchored(parent, name, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), x, y, w, h, label);
+    }
+
+    private static Button CreateButtonAnchored(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h, string label)
+    {
         GameObject obj = new GameObject(name);
-        SetupRect(obj, parent, x, y, w, h);
+        SetupRectAnchored(obj, parent, anchor, pivot, x, y, w, h);
         Image image = obj.AddComponent<Image>();
         image.color = Color.white;
         Button button = obj.AddComponent<Button>();
@@ -410,14 +419,22 @@ public static class SceneBuilder
     {
         // Top-right corner, above the prefecture button list (which is
         // positioned below this panel - see CreateButtonContainer).
-        GameObject panel = new GameObject("IntensityMapPanel");
-        RectTransform panelRect = SetupRectAnchored(panel, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -20, 280, 230);
+        return CreateIntensityMapPanel(parent, "IntensityMapPanel", new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -20, "震度マップ");
+    }
+
+    // Generic version so the same map (shapes/legend/player marker) can be
+    // built at any anchor - used for the top-right transient alert map and
+    // the persistent left-side monthly forecast map.
+    private static IntensityMapView CreateIntensityMapPanel(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, string label)
+    {
+        GameObject panel = new GameObject(name);
+        RectTransform panelRect = SetupRectAnchored(panel, parent, anchor, pivot, x, y, 280, 230);
         Image panelImage = panel.AddComponent<Image>();
         panelImage.color = new Color(0.93f, 0.93f, 0.95f);
 
-        Text label = CreateTextAnchored(panel.transform, "IntensityMapLabel", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -4, 260, 22, 14, "震度マップ");
-        label.alignment = TextAnchor.UpperCenter;
-        label.color = Color.black;
+        Text labelText = CreateTextAnchored(panel.transform, "IntensityMapLabel", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -4, 260, 22, 14, label);
+        labelText.alignment = TextAnchor.UpperCenter;
+        labelText.color = Color.black;
 
         GameObject mapAreaObj = new GameObject("MapArea");
         RectTransform mapAreaRect = SetupRectAnchored(mapAreaObj, panel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -28, 260, 150);

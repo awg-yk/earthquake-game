@@ -46,7 +46,6 @@ namespace EarthquakeGame
         public Text dateText;
         public Text survivalDaysText;
         public Text currentPrefectureText;
-        public Text nextMoveText;
         public Text latestEarthquakeText;
         public Text fortuneText;
         public Text scoreText;
@@ -59,6 +58,8 @@ namespace EarthquakeGame
         public GameObject titleScreenPanel;
         public Text earthquakeAlertText;
         public IntensityMapView intensityMapView;
+        [Tooltip("Persistent left-side map showing this month's forecasted warning areas - stays visible all month, unlike intensityMapView's brief alert flashes.")]
+        public IntensityMapView forecastMapView;
         [Tooltip("How long the earthquake alert banner/intensity map stays visible, in seconds.")]
         public float earthquakeAlertDuration = 3.5f;
         public Text nextShapeInfoText;
@@ -164,6 +165,7 @@ namespace EarthquakeGame
             if (intensityMapView != null) intensityMapView.ClearAll();
 
             currentForecast = fortuneTeller != null ? fortuneTeller.GetMonthlyForecast(currentDate) : "";
+            if (forecastMapView != null && fortuneTeller != null) forecastMapView.SetIntensities(fortuneTeller.LastForecastIntensities);
             PlayFortuneAnimation();
 
             if (mapManager != null)
@@ -319,6 +321,7 @@ namespace EarthquakeGame
             if (fortuneTeller != null && currentDate.Day == 1)
             {
                 currentForecast = fortuneTeller.GetMonthlyForecast(currentDate);
+                if (forecastMapView != null) forecastMapView.SetIntensities(fortuneTeller.LastForecastIntensities);
                 PlayFortuneAnimation();
             }
 
@@ -376,11 +379,6 @@ namespace EarthquakeGame
             fortuneAnimationPanel.SetActive(true);
             if (fortuneAnimationText != null) fortuneAnimationText.text = currentForecast;
             if (fortuneChimePlayer != null) fortuneChimePlayer.PlayChime();
-            if (intensityMapView != null && fortuneTeller != null)
-            {
-                intensityMapView.SetIntensities(fortuneTeller.LastForecastIntensities);
-                intensityMapView.BringToFront();
-            }
 
             float elapsed = 0f;
             while (elapsed < fortuneAnimationDuration)
@@ -398,7 +396,6 @@ namespace EarthquakeGame
             }
 
             fortuneAnimationPanel.SetActive(false);
-            if (intensityMapView != null) intensityMapView.ClearAll();
             fortuneAnimationCoroutine = null;
         }
 
@@ -417,7 +414,7 @@ namespace EarthquakeGame
                 roundEndScoreText.text =
                     $"1年間、生き延びました。\n" +
                     $"最終スコア：{finalScore}点（個数＋高さ）\n" +
-                    $"積み木の数：{finalCount}個（最高{maxCount}個）\n" +
+                    $"個数：{finalCount}個（最高{maxCount}個）\n" +
                     $"高さ：{finalHeight:0.0}m（最高{maxHeight:0.0}m）";
             }
         }
@@ -427,12 +424,6 @@ namespace EarthquakeGame
             if (dateText != null) dateText.text = $"日付：{currentDate:yyyy年M月d日}";
             if (survivalDaysText != null) survivalDaysText.text = $"経過日数：{survivalDays}/{daysPerRound}日";
             if (currentPrefectureText != null) currentPrefectureText.text = $"現在地：{playerManager.CurrentPrefecture}";
-            if (nextMoveText != null)
-            {
-                nextMoveText.text = playerManager.CanMoveNow
-                    ? "移動可能"
-                    : $"次回移動可能：あと{playerManager.DaysUntilNextMove}日";
-            }
 
             if (latestEarthquakeText != null)
             {
@@ -453,6 +444,10 @@ namespace EarthquakeGame
             {
                 intensityMapView.SetPlayerPosition(playerManager.CurrentPrefecture);
             }
+            if (forecastMapView != null)
+            {
+                forecastMapView.SetPlayerPosition(playerManager.CurrentPrefecture);
+            }
 
             if (fortuneText != null)
             {
@@ -463,11 +458,11 @@ namespace EarthquakeGame
             {
                 if (scoreText != null)
                 {
-                    scoreText.text = $"現在のスコア：{blockTowerManager.GetScore()}点（個数＋高さ）";
+                    scoreText.text = $"スコア：{blockTowerManager.GetScore()}点（個数＋高さ）";
                 }
                 if (countStatsText != null)
                 {
-                    countStatsText.text = $"積み木の数：現在{blockTowerManager.AliveBlockCount}個／最高{blockTowerManager.MaxBlockCountReached}個";
+                    countStatsText.text = $"個数：現在{blockTowerManager.AliveBlockCount}個／最高{blockTowerManager.MaxBlockCountReached}個";
                 }
                 if (heightStatsText != null)
                 {

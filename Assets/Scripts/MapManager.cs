@@ -36,8 +36,8 @@ namespace EarthquakeGame
                 Destroy(child.gameObject);
             }
 
-            CreateButton(currentPrefecture, currentColor, false);
-
+            // Current location isn't something the player can "move to", so
+            // it no longer gets its own button - only actual destinations do.
             foreach (var neighbor in neighbors)
             {
                 CreateButton(neighbor, canMove ? reachableColor : notYetReachableColor, canMove);

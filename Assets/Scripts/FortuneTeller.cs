@@ -29,7 +29,7 @@ namespace EarthquakeGame
             LastForecastIntensities = map;
 
             LastForecastMessage = map.Count > 0
-                ? $"地震予報士：{currentDate.Month}月の警戒地域を地図の色で示しました。"
+                ? $"地震予報士：{currentDate.Month}月の予報まとめです"
                 : $"地震予報士：{currentDate.Month}月は大きな揺れはなさそうです。";
 
             return LastForecastMessage;
