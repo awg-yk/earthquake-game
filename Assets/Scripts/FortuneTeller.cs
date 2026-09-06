@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 namespace EarthquakeGame
 {
-    // The in-game "fortune teller" (占い師). Not real earthquake prediction,
-    // but here it's deliberately confident and precise (not vague): on the
-    // 1st of every month, it peeks at that entire month's future earthquake
-    // data and names every prefecture that will feel shindo 2 or stronger
-    // at some point during the month - shown directly on the intensity map.
+    // The in-game "earthquake forecaster" (地震予報士). Not real earthquake
+    // prediction, but here it's deliberately confident and precise (not
+    // vague): on the 1st of every month, it peeks at that entire month's
+    // future earthquake data and marks every prefecture that will feel
+    // shindo 2 or stronger at some point during the month - shown as
+    // colors directly on the intensity map, not spelled out in words.
     public class FortuneTeller : MonoBehaviour
     {
         public EarthquakeManager earthquakeManager;
@@ -29,8 +29,8 @@ namespace EarthquakeGame
             LastForecastIntensities = map;
 
             LastForecastMessage = map.Count > 0
-                ? $"占い師：{currentDate.Month}月は{string.Join("、", map.Keys.OrderByDescending(p => IntensityScale.ToRank(map[p])))}で震度2以上の揺れがあるでしょう。"
-                : $"占い師：{currentDate.Month}月は大きな揺れはなさそうです。";
+                ? $"地震予報士：{currentDate.Month}月の警戒地域を地図の色で示しました。"
+                : $"地震予報士：{currentDate.Month}月は大きな揺れはなさそうです。";
 
             return LastForecastMessage;
         }

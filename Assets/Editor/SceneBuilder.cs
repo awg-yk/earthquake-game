@@ -41,7 +41,7 @@ public static class SceneBuilder
         Text countStatsText = CreateTextAnchored(canvas.transform, "CountStatsText", topLeft, topLeft, 20, -192, 380, 26, 16, "積み木の数：現在0個／最高0個");
         Text heightStatsText = CreateTextAnchored(canvas.transform, "HeightStatsText", topLeft, topLeft, 20, -220, 380, 26, 16, "高さ：現在0.0m／最高0.0m");
         Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topLeft, topLeft, 20, -256, 380, 140, 18, "最新の地震：なし");
-        Text fortuneText = CreateTextAnchored(canvas.transform, "FortuneText", topLeft, topLeft, 20, -404, 380, 90, 16, "占い師：…");
+        Text fortuneText = CreateTextAnchored(canvas.transform, "FortuneText", topLeft, topLeft, 20, -404, 380, 90, 16, "地震予報士：…");
 
         GameObject buttonContainer = CreateButtonContainer(canvas.transform);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
@@ -492,7 +492,7 @@ public static class SceneBuilder
         iconRect.localRotation = Quaternion.Euler(0, 0, 45f);
         icon = iconRect;
 
-        Text title = CreateText(panel.transform, "FortuneAnimationTitle", 0, 200, 700, 50, 28, "占い師のお告げ");
+        Text title = CreateText(panel.transform, "FortuneAnimationTitle", 0, 200, 700, 50, 28, "地震予報士の予報");
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.9f, 0.8f, 1f);
         title.fontStyle = FontStyle.Bold;

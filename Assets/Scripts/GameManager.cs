@@ -329,10 +329,9 @@ namespace EarthquakeGame
             earthquakeAlertCoroutine = null;
         }
 
-        // A dedicated "the fortune teller has spoken" moment every
-        // forecastIntervalDays: a full-screen overlay with a spinning icon
-        // and a chime, so the forecast doesn't just quietly appear in the
-        // corner of the HUD.
+        // A dedicated "the forecaster has spoken" moment on the 1st of every
+        // month: a full-screen overlay with a spinning icon and a chime, so
+        // the forecast doesn't just quietly appear in the corner of the HUD.
         private void PlayFortuneAnimation()
         {
             if (fortuneAnimationPanel == null) return;
