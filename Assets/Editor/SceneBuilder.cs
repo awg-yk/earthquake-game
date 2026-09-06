@@ -24,7 +24,7 @@ public static class SceneBuilder
             Object.DestroyImmediate(root);
         }
 
-        CreateCamera();
+        Camera mainCamera = CreateCamera();
         CreateLight();
         Rigidbody2D basePlatform = CreateBasePlatform();
 
@@ -54,6 +54,14 @@ public static class SceneBuilder
         Transform dropIndicator = CreateDropIndicator();
 
         GameObject roundEndPanel = CreateRoundEndPanel(canvas.transform, out Text roundEndScoreText, out Button restartButton);
+
+        Text earthquakeAlertText = CreateText(canvas.transform, "EarthquakeAlertText", 0, 260, 600, 60, 32, "地震発生！");
+        earthquakeAlertText.alignment = TextAnchor.MiddleCenter;
+        earthquakeAlertText.color = new Color(0.85f, 0.1f, 0.1f);
+        earthquakeAlertText.fontStyle = FontStyle.Bold;
+        earthquakeAlertText.gameObject.SetActive(false);
+
+        GameObject titleScreenPanel = CreateTitleScreenPanel(canvas.transform, out Button startButton);
 
         // --- Managers ---
         GameObject gameManagerObj = new GameObject("GameManager");
@@ -90,6 +98,10 @@ public static class SceneBuilder
         gameManager.placementSlider = placementSlider;
         gameManager.placementPositionText = placementPositionText;
         gameManager.dropIndicator = dropIndicator;
+        gameManager.cameraShaker = mainCamera.GetComponent<CameraShaker>();
+        gameManager.earthquakeSoundPlayer = mainCamera.GetComponent<EarthquakeSoundPlayer>();
+        gameManager.earthquakeAlertText = earthquakeAlertText;
+        gameManager.titleScreenPanel = titleScreenPanel;
 
         mapManager.prefectureButtonPrefab = prefectureButtonTemplate;
         mapManager.buttonContainer = buttonContainer.transform;
@@ -102,6 +114,7 @@ public static class SceneBuilder
         UnityEventTools.AddVoidPersistentListener(circleButton.onClick, gameManager.SelectCircle);
         UnityEventTools.AddVoidPersistentListener(placeButton.onClick, gameManager.OnPlaceBlockClicked);
         UnityEventTools.AddVoidPersistentListener(restartButton.onClick, gameManager.OnRestartClicked);
+        UnityEventTools.AddVoidPersistentListener(startButton.onClick, gameManager.OnStartButtonClicked);
 
         roundEndPanel.SetActive(false);
 
@@ -111,7 +124,7 @@ public static class SceneBuilder
         Debug.Log("SceneBuilder: MainScene built and saved successfully.");
     }
 
-    private static void CreateCamera()
+    private static Camera CreateCamera()
     {
         GameObject camObj = new GameObject("Main Camera");
         camObj.tag = "MainCamera";
@@ -122,6 +135,9 @@ public static class SceneBuilder
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color(0.75f, 0.85f, 0.95f);
         camObj.AddComponent<AudioListener>();
+        camObj.AddComponent<CameraShaker>();
+        camObj.AddComponent<EarthquakeSoundPlayer>();
+        return cam;
     }
 
     private static void CreateLight()
@@ -304,6 +320,34 @@ public static class SceneBuilder
         slider.value = defaultValue;
 
         return slider;
+    }
+
+    // A full-screen title panel shown on top of everything at launch. The
+    // game underneath is already initialized (Start() runs StartNewGame()
+    // as usual); this panel just blocks input until the player presses
+    // start, then hides itself.
+    private static GameObject CreateTitleScreenPanel(Transform parent, out Button startButton)
+    {
+        GameObject panel = new GameObject("TitleScreenPanel");
+        SetupRect(panel, parent, 0, 0, 1280, 720);
+        Image panelImage = panel.AddComponent<Image>();
+        panelImage.color = new Color(0.08f, 0.1f, 0.16f, 0.97f);
+
+        Text titleText = CreateText(panel.transform, "TitleText", 0, 80, 900, 140, 48, "日本地震サバイバル\n積み木タワー");
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.color = Color.white;
+        titleText.fontStyle = FontStyle.Bold;
+
+        Text subtitleText = CreateText(panel.transform, "SubtitleText", 0, -20, 900, 100, 20,
+            "都道府県を移動しながら、四角・三角・丸の積み木を積み上げよう。\n" +
+            "地震が来ると土台が揺れ、積み木が崩れることがある。\n" +
+            "1年生き延びた時点で、残った積み木の数と形からスコアが決まる。");
+        subtitleText.alignment = TextAnchor.MiddleCenter;
+        subtitleText.color = new Color(0.85f, 0.85f, 0.9f);
+
+        startButton = CreateButton(panel.transform, "StartButton", 0, -150, 240, 70, "スタート");
+
+        return panel;
     }
 
     private static GameObject CreateRoundEndPanel(Transform parent, out Text scoreText, out Button restartButton)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -23,6 +24,8 @@ namespace EarthquakeGame
         public MapManager mapManager;
         public FortuneTeller fortuneTeller;
         public BlockTowerManager blockTowerManager;
+        public CameraShaker cameraShaker;
+        public EarthquakeSoundPlayer earthquakeSoundPlayer;
 
         [Header("Config")]
         [Tooltip("Each new game starts on January 1st of a random year in this range, so different playthroughs sample different real earthquakes.")]
@@ -46,15 +49,27 @@ namespace EarthquakeGame
         public Slider placementSlider;
         public Text placementPositionText;
         public Transform dropIndicator;
+        public GameObject titleScreenPanel;
+        public Text earthquakeAlertText;
+        [Tooltip("How long the earthquake alert banner stays visible, in seconds.")]
+        public float earthquakeAlertDuration = 2.5f;
 
         private DateTime currentDate;
         private int survivalDays;
         private bool isRoundOver;
         private BlockShape selectedShape = BlockShape.Square;
+        private Coroutine earthquakeAlertCoroutine;
 
         void Start()
         {
             StartNewGame();
+            if (titleScreenPanel != null) titleScreenPanel.SetActive(true);
+        }
+
+        // Called by the title screen's "スタート" button.
+        public void OnStartButtonClicked()
+        {
+            if (titleScreenPanel != null) titleScreenPanel.SetActive(false);
         }
 
         // Keeps the drop-preview marker and position readout in sync with
@@ -93,6 +108,8 @@ namespace EarthquakeGame
 
             if (blockTowerManager != null) blockTowerManager.ClearAllBlocks();
             if (roundEndPanel != null) roundEndPanel.SetActive(false);
+            if (earthquakeAlertCoroutine != null) { StopCoroutine(earthquakeAlertCoroutine); earthquakeAlertCoroutine = null; }
+            if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
 
             if (mapManager != null)
             {
@@ -150,9 +167,16 @@ namespace EarthquakeGame
                 }
             }
 
-            if (shakeRank > 0 && blockTowerManager != null)
+            if (shakeRank > 0)
             {
-                blockTowerManager.Shake(shakeRank);
+                if (blockTowerManager != null) blockTowerManager.Shake(shakeRank);
+                if (cameraShaker != null) cameraShaker.Shake(shakeRank);
+                if (earthquakeSoundPlayer != null) earthquakeSoundPlayer.PlayRumble(shakeRank);
+                if (earthquakeAlertText != null)
+                {
+                    if (earthquakeAlertCoroutine != null) StopCoroutine(earthquakeAlertCoroutine);
+                    earthquakeAlertCoroutine = StartCoroutine(ShowEarthquakeAlert(relevantForDisplay, shakeRank));
+                }
             }
 
             playerManager.AdvanceOneDay();
@@ -162,6 +186,18 @@ namespace EarthquakeGame
             {
                 EndRound();
             }
+        }
+
+        private IEnumerator ShowEarthquakeAlert(EarthquakeEvent ev, int shakeRank)
+        {
+            string intensityLabel = ev != null ? ev.GetIntensityFor(playerManager.CurrentPrefecture) : null;
+            earthquakeAlertText.text = $"地震発生！ 震度{intensityLabel ?? "?"}";
+            earthquakeAlertText.gameObject.SetActive(true);
+
+            yield return new WaitForSeconds(earthquakeAlertDuration);
+
+            earthquakeAlertText.gameObject.SetActive(false);
+            earthquakeAlertCoroutine = null;
         }
 
         private void EndRound()
