@@ -27,7 +27,7 @@ namespace EarthquakeGame
         [Header("Config")]
         [Tooltip("Each new game starts on January 1st of a random year in this range, so different playthroughs sample different real earthquakes.")]
         public int minStartYear = 2000;
-        public int maxStartYear = 2024;
+        public int maxStartYear = 2022;
         public string startingPrefecture = "東京都";
 
         [Tooltip("Length of one round, in in-game days.")]
