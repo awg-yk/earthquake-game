@@ -189,7 +189,12 @@ def parse_station_record(line):
     return station_id, intensity
 
 
-def convert(dat_path, code_p_path, prefectures_path, min_magnitude, min_intensity_rank, start_year, end_year):
+def convert(dat_paths, code_p_path, prefectures_path, min_magnitude, min_intensity_rank, start_year, end_year):
+    """dat_paths: a single path or a list of paths (e.g. one .dat file per
+    year, as produced by extracting the JMA yearly zip downloads)."""
+    if isinstance(dat_paths, (str, Path)):
+        dat_paths = [dat_paths]
+
     centroids = load_prefecture_centroids(prefectures_path)
     stations = load_station_coordinates(code_p_path)
 
@@ -231,43 +236,59 @@ def convert(dat_path, code_p_path, prefectures_path, min_magnitude, min_intensit
             "intensities": dict(current_intensities),
         })
 
-    with open(dat_path, "rb") as f:
-        for raw_line in f:
-            line = raw_line.rstrip(b"\r\n")
-            if len(line) < RECORD_LENGTH:
-                line = line.ljust(RECORD_LENGTH, b" ")
-            record_type = chr(line[0]) if line[0] < 128 else "?"
+    for dat_path in dat_paths:
+        with open(dat_path, "rb") as f:
+            for raw_line in f:
+                line = raw_line.rstrip(b"\r\n")
+                if len(line) < RECORD_LENGTH:
+                    line = line.ljust(RECORD_LENGTH, b" ")
+                record_type = chr(line[0]) if line[0] < 128 else "?"
 
-            if record_type in ("A", "B", "D"):
-                finalize()
-                current_header = parse_header_record(line)
-                current_intensities = {}
-            else:
-                if current_header is None:
-                    continue
-                parsed = parse_station_record(line)
-                if parsed is None:
-                    continue
-                station_id, intensity = parsed
-                coords = stations.get(station_id)
-                if coords is None:
-                    continue
-                pref = nearest_prefecture(coords[0], coords[1], centroids)
-                if pref is None:
-                    continue
-                existing = current_intensities.get(pref)
-                if existing is None or rank_of(intensity) > rank_of(existing):
-                    current_intensities[pref] = intensity
+                if record_type in ("A", "B", "D"):
+                    finalize()
+                    current_header = parse_header_record(line)
+                    current_intensities = {}
+                else:
+                    if current_header is None:
+                        continue
+                    parsed = parse_station_record(line)
+                    if parsed is None:
+                        continue
+                    station_id, intensity = parsed
+                    coords = stations.get(station_id)
+                    if coords is None:
+                        continue
+                    pref = nearest_prefecture(coords[0], coords[1], centroids)
+                    if pref is None:
+                        continue
+                    existing = current_intensities.get(pref)
+                    if existing is None or rank_of(intensity) > rank_of(existing):
+                        current_intensities[pref] = intensity
 
-        finalize()
+            finalize()
+            current_header = None
+            current_intensities = {}
 
     events.sort(key=lambda e: (e["date"], e["time"]))
     return events
 
 
+def resolve_dat_paths(raw_path):
+    """Accepts a single .dat file, or a folder containing many .dat files
+    (e.g. one per year, as produced by extracting the JMA yearly zips)."""
+    path = Path(raw_path)
+    if path.is_dir():
+        paths = sorted(path.glob("*.dat")) + sorted(path.glob("*.DAT"))
+        if not paths:
+            # Some JMA yearly downloads have no extension at all (e.g. "i1990").
+            paths = sorted(p for p in path.iterdir() if p.is_file() and p.name.lower() != "code_p.dat")
+        return paths
+    return [path]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("dat_file", help="Path to the JMA shindo DAT file (Shift-JIS, fixed-length)")
+    parser.add_argument("dat_file", help="Path to a JMA shindo DAT file, or a folder containing many (one per year)")
     parser.add_argument("code_p_file", help="Path to code_p.dat (station master file)")
     parser.add_argument("--prefectures", default="Assets/Resources/Data/prefectures.json")
     parser.add_argument("--output", default="Assets/Resources/Data/earthquakes.json")
@@ -277,8 +298,14 @@ def main():
     parser.add_argument("--end-year", type=int, default=None)
     args = parser.parse_args()
 
+    dat_paths = resolve_dat_paths(args.dat_file)
+    if not dat_paths:
+        print(f"No .dat files found at {args.dat_file}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Processing {len(dat_paths)} file(s)...", file=sys.stderr)
+
     events = convert(
-        args.dat_file, args.code_p_file, args.prefectures,
+        dat_paths, args.code_p_file, args.prefectures,
         args.min_magnitude, args.min_intensity_rank,
         args.start_year, args.end_year,
     )
