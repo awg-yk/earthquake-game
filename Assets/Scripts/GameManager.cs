@@ -37,6 +37,9 @@ namespace EarthquakeGame
         [Tooltip("Length of one round, in in-game days.")]
         public int daysPerRound = 360;
 
+        [Tooltip("The fortune teller gives a fresh precise forecast every this many days.")]
+        public int forecastIntervalDays = 10;
+
         [Header("UI (Text can be swapped for TMP_Text)")]
         public Text dateText;
         public Text survivalDaysText;
@@ -60,6 +63,7 @@ namespace EarthquakeGame
         private bool isRoundOver;
         private BlockShape selectedShape = BlockShape.Square;
         private Coroutine earthquakeAlertCoroutine;
+        private string currentForecast = "";
 
         void Start()
         {
@@ -124,6 +128,8 @@ namespace EarthquakeGame
             if (earthquakeAlertCoroutine != null) { StopCoroutine(earthquakeAlertCoroutine); earthquakeAlertCoroutine = null; }
             if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
             if (intensityMapView != null) intensityMapView.ClearAll();
+
+            currentForecast = fortuneTeller != null ? fortuneTeller.GetPeriodicForecast(currentDate) : "";
 
             if (mapManager != null)
             {
@@ -235,6 +241,12 @@ namespace EarthquakeGame
             }
 
             playerManager.AdvanceOneDay();
+
+            if (fortuneTeller != null && forecastIntervalDays > 0 && survivalDays % forecastIntervalDays == 0)
+            {
+                currentForecast = fortuneTeller.GetPeriodicForecast(currentDate);
+            }
+
             RefreshUI(playerEvent);
 
             if (survivalDays >= daysPerRound)
@@ -308,9 +320,9 @@ namespace EarthquakeGame
                     playerManager.CanMoveNow);
             }
 
-            if (fortuneText != null && fortuneTeller != null)
+            if (fortuneText != null)
             {
-                fortuneText.text = fortuneTeller.GetFortune(currentDate, playerManager.CurrentPrefecture);
+                fortuneText.text = currentForecast;
             }
 
             if (scoreText != null && blockTowerManager != null)

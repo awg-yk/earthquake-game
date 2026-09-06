@@ -87,5 +87,40 @@ namespace EarthquakeGame
             }
             return null;
         }
+
+        // Scans ahead from (exclusive) startDate for up to dayRange days for
+        // the first earthquake that hits ANY prefecture at or above
+        // minRank, anywhere in Japan - not just the player's location. Used
+        // by the fortune teller for its precise "big one" forecast.
+        public (int daysUntil, string prefecture, string intensity)? FindNextBigQuake(DateTime startDate, int dayRange, int minRank)
+        {
+            for (int i = 1; i <= dayRange; i++)
+            {
+                var events = GetEarthquakesOn(startDate.AddDays(i));
+                string bestPrefecture = null;
+                string bestIntensity = null;
+                int bestRank = 0;
+
+                foreach (var ev in events)
+                {
+                    foreach (var kv in ev.intensities)
+                    {
+                        int rank = IntensityScale.ToRank(kv.Value);
+                        if (rank >= minRank && rank > bestRank)
+                        {
+                            bestRank = rank;
+                            bestPrefecture = kv.Key;
+                            bestIntensity = kv.Value;
+                        }
+                    }
+                }
+
+                if (bestPrefecture != null)
+                {
+                    return (i, bestPrefecture, bestIntensity);
+                }
+            }
+            return null;
+        }
     }
 }

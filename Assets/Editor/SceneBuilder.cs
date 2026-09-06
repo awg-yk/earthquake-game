@@ -109,7 +109,6 @@ public static class SceneBuilder
         mapManager.buttonContainer = buttonContainer.transform;
 
         fortuneTeller.earthquakeManager = earthquakeManager;
-        fortuneTeller.playerManager = playerManager;
 
         UnityEventTools.AddVoidPersistentListener(squareButton.onClick, gameManager.SelectSquare);
         UnityEventTools.AddVoidPersistentListener(triangleButton.onClick, gameManager.SelectTriangle);

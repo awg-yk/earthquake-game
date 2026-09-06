@@ -3,55 +3,33 @@ using UnityEngine;
 
 namespace EarthquakeGame
 {
-    // The in-game "fortune teller" (占い師). Not real earthquake prediction -
-    // it peeks at future earthquake data the player cannot see directly, and
-    // turns it into a vague hint (rough direction, rough timeframe) so the
-    // player can make an informed-but-uncertain decision about where to move.
+    // The in-game "fortune teller" (占い師). Not real earthquake prediction,
+    // but here it's deliberately confident and precise (not vague) - every
+    // forecastIntervalDays it peeks at future earthquake data and names the
+    // exact prefecture, timing and intensity of the next big one (shindo 5
+    // or stronger) within the following forecastWindowDays, anywhere in
+    // Japan. This gives the player a real choice: move toward it for a
+    // shot at a big score multiplier, or stay well away from it.
     public class FortuneTeller : MonoBehaviour
     {
         public EarthquakeManager earthquakeManager;
-        public PlayerManager playerManager;
 
-        [Tooltip("How many days ahead the fortune teller is allowed to peek.")]
-        public int lookAheadDays = 10;
+        [Tooltip("How many days ahead the forecast looks.")]
+        public int forecastWindowDays = 10;
 
-        public string GetFortune(DateTime currentDate, string currentPrefecture)
+        [Tooltip("Minimum shindo (5=5弱) the forecast bothers announcing.")]
+        public int minRank = 5;
+
+        public string GetPeriodicForecast(DateTime currentDate)
         {
-            EarthquakeEvent futureEvent = earthquakeManager.PeekFutureEarthquake(currentDate, lookAheadDays);
-            if (futureEvent == null)
+            var result = earthquakeManager.FindNextBigQuake(currentDate, forecastWindowDays, minRank);
+            if (result == null)
             {
-                return "占い師：しばらくは静かな日々が続きそうです。";
+                return $"占い師：今後{forecastWindowDays}日間、大きな地震（震度5弱以上）の心配はなさそうです。";
             }
 
-            DateTime eventDate = DateTime.Parse(futureEvent.date);
-            int daysUntil = (eventDate - currentDate).Days;
-
-            var (playerLat, playerLon) = playerManager.GetCoordinates(currentPrefecture);
-            string direction = GetCompassDirection(playerLat, playerLon, futureEvent.latitude, futureEvent.longitude);
-
-            if (direction == null)
-            {
-                return $"占い師：{daysUntil}日以内に、大きな地震が発生する可能性があります。";
-            }
-
-            return $"占い師：{daysUntil}日以内に、あなたのいる場所から{direction}の方向で大きな揺れが起きるかもしれません。";
-        }
-
-        // Very rough 8-direction compass bearing from (fromLat,fromLon) to (toLat,toLon).
-        // Precision doesn't matter here - this is flavor text, not navigation.
-        private static string GetCompassDirection(double fromLat, double fromLon, double toLat, double toLon)
-        {
-            double dLat = toLat - fromLat;
-            double dLon = toLon - fromLon;
-
-            if (Math.Abs(dLat) < 0.05 && Math.Abs(dLon) < 0.05) return null; // essentially on top of the player
-
-            double angle = Math.Atan2(dLon, dLat) * Mathf.Rad2Deg; // 0 = north, 90 = east
-            if (angle < 0) angle += 360;
-
-            string[] directions = { "北", "北東", "東", "南東", "南", "南西", "西", "北西" };
-            int index = Mathf.RoundToInt((float)angle / 45f) % 8;
-            return directions[index];
+            var (daysUntil, prefecture, intensity) = result.Value;
+            return $"占い師：{daysUntil}日後、{prefecture}で震度{intensity}の地震が起きるでしょう。";
         }
     }
 }

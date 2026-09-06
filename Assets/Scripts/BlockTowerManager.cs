@@ -104,6 +104,11 @@ namespace EarthquakeGame
 
         private IEnumerator ShakeRoutine(int intensityRank)
         {
+            // Snapshot who's standing before the shake, so we can tell
+            // afterwards who survived it (for the score multiplier) even
+            // though PlaceBlock/Update keep mutating aliveBlocks over time.
+            var blocksBeforeShake = new List<Block>(aliveBlocks);
+
             float amplitude = shakeAmplitudePerRank * intensityRank;
             float duration = baseShakeDuration + shakeDurationPerRank * intensityRank;
             float elapsed = 0f;
@@ -118,6 +123,19 @@ namespace EarthquakeGame
             }
 
             baseRigidbody.MovePosition(basePlatformRestPosition);
+
+            int shindoNumber = IntensityScale.GetShindoNumberFromRank(intensityRank);
+            if (shindoNumber >= 5)
+            {
+                foreach (var block in blocksBeforeShake)
+                {
+                    if (block != null && aliveBlocks.Contains(block))
+                    {
+                        block.ApplySurvivedShindo(shindoNumber);
+                    }
+                }
+            }
+
             shakeCoroutine = null;
         }
 
@@ -139,7 +157,7 @@ namespace EarthquakeGame
             int total = 0;
             foreach (var block in aliveBlocks)
             {
-                if (block != null) total += block.Score;
+                if (block != null) total += block.FinalScore;
             }
             return total;
         }
