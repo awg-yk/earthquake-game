@@ -1,14 +1,19 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace EarthquakeGame
 {
-    // Owns the physical block tower: placing new blocks, shaking the base
-    // when an earthquake hits the player's location, and tracking the
-    // stats (block count, height) the score is built from.
+    // Owns the physical block tower shared by the player and the NPC:
+    // placing new blocks and shaking the base when an earthquake hits the
+    // player's location.
     public class BlockTowerManager : MonoBehaviour
     {
+        // Fired the moment any block falls off the tower - used by
+        // GameManager to end the Player-vs-NPC duel in sudden death.
+        public event Action OnBlockFell;
+
         [Header("Base platform")]
         public Rigidbody2D baseRigidbody;
         public float baseHalfWidth = 4f;
@@ -63,8 +68,6 @@ namespace EarthquakeGame
         private readonly List<Block> aliveBlocks = new List<Block>();
         private Vector3 basePlatformRestPosition;
         private Coroutine shakeCoroutine;
-        private float maxHeightReached;
-        private int maxBlockCountReached;
         private Rigidbody2D lastPlacedRigidbody;
 
         // The player can only drop a new block once the previous one has
@@ -83,8 +86,6 @@ namespace EarthquakeGame
         }
 
         public int AliveBlockCount => aliveBlocks.Count;
-        public int MaxBlockCountReached => maxBlockCountReached;
-        public float MaxHeightReached => maxHeightReached;
         public float CurrentHeight => GetCurrentTowerTopY() - GetBaseTopY();
 
         // Height at which the next block would be dropped, useful for
@@ -130,7 +131,6 @@ namespace EarthquakeGame
 
             lastPlacedRigidbody = rb;
             aliveBlocks.Add(block);
-            if (aliveBlocks.Count > maxBlockCountReached) maxBlockCountReached = aliveBlocks.Count;
             return block;
         }
 
@@ -191,18 +191,9 @@ namespace EarthquakeGame
                 {
                     aliveBlocks.RemoveAt(i);
                     if (block != null) Destroy(block.gameObject);
+                    OnBlockFell?.Invoke();
                 }
             }
-
-            float currentHeight = CurrentHeight;
-            if (currentHeight > maxHeightReached) maxHeightReached = currentHeight;
-        }
-
-        // Score = block count + tower height, added together (no intensity
-        // weighting) - simple and legible: taller and fuller both help.
-        public int GetScore()
-        {
-            return AliveBlockCount + Mathf.RoundToInt(CurrentHeight);
         }
 
         public void ClearAllBlocks()
@@ -212,8 +203,6 @@ namespace EarthquakeGame
                 if (block != null) Destroy(block.gameObject);
             }
             aliveBlocks.Clear();
-            maxHeightReached = 0f;
-            maxBlockCountReached = 0;
             lastPlacedRigidbody = null;
         }
     }

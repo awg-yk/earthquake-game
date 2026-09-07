@@ -34,17 +34,17 @@ public static class SceneBuilder
 
         Vector2 topLeft = new Vector2(0f, 1f);
         Text dateText = CreateTextAnchored(canvas.transform, "DateText", topLeft, topLeft, 20, -20, 380, 40, 22, "日付：2000年1月1日");
-        Text survivalDaysText = CreateTextAnchored(canvas.transform, "SurvivalDaysText", topLeft, topLeft, 20, -55, 380, 40, 22, "経過日数：0/360日");
+        Text survivalDaysText = CreateTextAnchored(canvas.transform, "SurvivalDaysText", topLeft, topLeft, 20, -55, 380, 40, 22, "経過日数：0日目");
         Text currentPrefectureText = CreateTextAnchored(canvas.transform, "CurrentPrefectureText", topLeft, topLeft, 20, -90, 380, 40, 22, "現在地：東京都");
-        Text scoreText = CreateTextAnchored(canvas.transform, "ScoreText", topLeft, topLeft, 20, -125, 380, 30, 20, "スコア：0点（個数＋高さ）");
-        Text countStatsText = CreateTextAnchored(canvas.transform, "CountStatsText", topLeft, topLeft, 20, -157, 380, 26, 16, "個数：現在0個／最高0個");
-        Text heightStatsText = CreateTextAnchored(canvas.transform, "HeightStatsText", topLeft, topLeft, 20, -185, 380, 26, 16, "高さ：現在0.0m／最高0.0m");
-        Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topLeft, topLeft, 20, -221, 380, 140, 18, "最新の地震：なし");
+        Text turnText = CreateTextAnchored(canvas.transform, "TurnText", topLeft, topLeft, 20, -125, 380, 34, 22, "あなたの番です");
+        turnText.fontStyle = FontStyle.Bold;
+        turnText.color = new Color(0.1f, 0.4f, 0.85f);
+        Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topLeft, topLeft, 20, -165, 380, 140, 18, "最新の地震：なし");
 
         // Persistent left-side map showing this month's forecasted warning
         // areas (震度2以上), unlike the right-side one which only flashes
         // briefly for earthquake alerts. Placed below the HUD text column.
-        IntensityMapView forecastMapView = CreateIntensityMapPanel(canvas.transform, "ForecastMapPanel", topLeft, topLeft, 20, -370, "今月の警戒マップ");
+        IntensityMapView forecastMapView = CreateIntensityMapPanel(canvas.transform, "ForecastMapPanel", topLeft, topLeft, 20, -315, "今月の警戒マップ");
 
         GameObject buttonContainer = CreateButtonContainer(canvas.transform);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
@@ -103,9 +103,7 @@ public static class SceneBuilder
         gameManager.survivalDaysText = survivalDaysText;
         gameManager.currentPrefectureText = currentPrefectureText;
         gameManager.latestEarthquakeText = latestEarthquakeText;
-        gameManager.scoreText = scoreText;
-        gameManager.countStatsText = countStatsText;
-        gameManager.heightStatsText = heightStatsText;
+        gameManager.turnText = turnText;
         gameManager.roundEndPanel = roundEndPanel;
         gameManager.roundEndScoreText = roundEndScoreText;
         gameManager.dropIndicator = dropIndicator;
@@ -338,7 +336,7 @@ public static class SceneBuilder
         Image panelImage = panel.AddComponent<Image>();
         panelImage.color = new Color(0, 0, 0, 0.82f);
 
-        Text titleText = CreateText(panel.transform, "RoundEndTitleText", 0, 150, 460, 60, 32, "今年の記録");
+        Text titleText = CreateText(panel.transform, "RoundEndTitleText", 0, 150, 460, 60, 32, "決着！");
         titleText.alignment = TextAnchor.MiddleCenter;
         titleText.color = Color.white;
 

@@ -11,14 +11,16 @@ namespace EarthquakeGame
     // PlayerManager / EarthquakeManager / MapManager / BlockTowerManager
     // together, and drives the minimal UI.
     //
-    // There is no GAME OVER anymore. Placing a block (choosing a shape,
-    // then clicking on the tower) is the player's one action per day. If an
-    // earthquake hits the player's prefecture, the block tower's base
-    // shakes instead of ending the game; blocks can topple and are lost.
-    // After one in-game year (360 days) the round ends and the score is the
-    // total of every block still standing (fewer corners = worth more).
+    // Player and NPC share one tower and alternate turns dropping blocks.
+    // The moment any block falls - whether from a bad placement or from an
+    // earthquake shake - whoever was "responsible" loses immediately:
+    // the mover who dropped the block that started it, or the player if an
+    // earthquake (tied to the player's own location) causes the fall.
     public class GameManager : MonoBehaviour
     {
+        private enum Turn { Player, Npc }
+        private enum FallCause { PlayerPlacement, NpcPlacement, Earthquake }
+
         [Header("Managers")]
         public PlayerManager playerManager;
         public EarthquakeManager earthquakeManager;
@@ -36,20 +38,20 @@ namespace EarthquakeGame
         public int maxStartYear = 2022;
         public string startingPrefecture = "東京都";
 
-        [Tooltip("Length of one round, in in-game days - set automatically to 365 or 366 based on the chosen start year.")]
-        public int daysPerRound = 365;
-
         [Tooltip("Minimum felt intensity rank (3 = shindo 3) that actually shakes the tower - matches the real-world threshold where people notice shaking.")]
         public int minFeltRankToShake = 2;
+
+        [Tooltip("Seconds the NPC waits before dropping its block, so its turn reads clearly instead of happening instantly.")]
+        public float npcThinkDelay = 0.8f;
+        [Tooltip("How far from center (as a fraction of the placeable width) the NPC's random drop position can land.")]
+        public float npcAimJitter = 0.8f;
 
         [Header("UI (Text can be swapped for TMP_Text)")]
         public Text dateText;
         public Text survivalDaysText;
         public Text currentPrefectureText;
         public Text latestEarthquakeText;
-        public Text scoreText;
-        public Text heightStatsText;
-        public Text countStatsText;
+        public Text turnText;
         public GameObject roundEndPanel;
         public Text roundEndScoreText;
         public Transform dropIndicator;
@@ -78,7 +80,10 @@ namespace EarthquakeGame
 
         private DateTime currentDate;
         private int survivalDays;
-        private bool isRoundOver;
+        private bool isGameOver;
+        private Turn currentTurn;
+        private FallCause pendingFallCause;
+        private Coroutine npcTurnCoroutine;
         private Vector2 selectedSize = Vector2.one;
         private float selectedRotation = 0f;
         private Coroutine earthquakeAlertCoroutine;
@@ -93,9 +98,23 @@ namespace EarthquakeGame
 
         void Start()
         {
+            if (blockTowerManager != null) blockTowerManager.OnBlockFell += HandleBlockFell;
             StartNewGame();
             if (titleScreenPanel != null) titleScreenPanel.SetActive(true);
             if (bgmPlayer != null) bgmPlayer.Play();
+        }
+
+        // Sudden death: the first block to fall ends the game. Whoever
+        // caused it - the mover who placed the block that started the
+        // topple, or the player if it was an earthquake - loses.
+        private void HandleBlockFell()
+        {
+            if (isGameOver) return;
+            isGameOver = true;
+            if (npcTurnCoroutine != null) { StopCoroutine(npcTurnCoroutine); npcTurnCoroutine = null; }
+
+            bool playerLost = pendingFallCause != FallCause.NpcPlacement;
+            ShowGameOver(playerLost);
         }
 
         // Called by the title screen's "スタート" button.
@@ -109,9 +128,11 @@ namespace EarthquakeGame
         // click isn't on top of a UI element (shape buttons, panels, etc).
         void Update()
         {
-            if (isRoundOver || blockTowerManager == null || Camera.main == null) return;
+            if (isGameOver || blockTowerManager == null || Camera.main == null) return;
 
             FollowTowerHeight();
+
+            bool isPlayerTurn = currentTurn == Turn.Player;
 
             float distanceFromCamera = Camera.main.transform.position.z * -1f;
             Vector3 screenPos = Input.mousePosition;
@@ -122,14 +143,18 @@ namespace EarthquakeGame
 
             if (dropIndicator != null)
             {
+                dropIndicator.gameObject.SetActive(isPlayerTurn);
                 dropIndicator.position = new Vector3(x, spawnY + 1.1f, -0.5f);
             }
 
             if (shapePreview != null)
             {
+                shapePreview.SetActive(isPlayerTurn);
                 shapePreview.transform.position = new Vector3(x, spawnY + 0.5f, -0.5f);
                 shapePreview.transform.rotation = Quaternion.Euler(0, 0, selectedRotation);
             }
+
+            if (!isPlayerTurn) return;
 
             if (Input.GetKeyDown(KeyCode.Q)) RotateLeft();
             if (Input.GetKeyDown(KeyCode.E)) RotateRight();
@@ -137,10 +162,47 @@ namespace EarthquakeGame
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
             if (!overUI && Input.GetMouseButtonDown(0) && blockTowerManager.IsSettled())
             {
+                pendingFallCause = FallCause.PlayerPlacement;
                 blockTowerManager.PlaceBlock(selectedSize, x, selectedRotation);
-                AdvanceDay();
-                PickNextShape();
+                BeginNpcTurn();
             }
+        }
+
+        // Hands the turn to the NPC: it "thinks" briefly, then drops a
+        // block at a randomized position/rotation of its own.
+        private void BeginNpcTurn()
+        {
+            currentTurn = Turn.Npc;
+            RefreshUI(null);
+            if (npcTurnCoroutine != null) StopCoroutine(npcTurnCoroutine);
+            npcTurnCoroutine = StartCoroutine(NpcTurnRoutine());
+        }
+
+        private IEnumerator NpcTurnRoutine()
+        {
+            yield return new WaitForSeconds(npcThinkDelay);
+            while (!blockTowerManager.IsSettled()) yield return null;
+            if (isGameOver) yield break;
+
+            Vector2 npcSize = blockTowerManager.GetBlockSize();
+            float x = UnityEngine.Random.Range(-npcAimJitter, npcAimJitter) * blockTowerManager.baseHalfWidth;
+            float rotation = UnityEngine.Random.Range(-30f, 30f);
+
+            pendingFallCause = FallCause.NpcPlacement;
+            blockTowerManager.PlaceBlock(npcSize, x, rotation);
+
+            // Let the NPC's own block finish settling (and any resulting
+            // fall get attributed to it) before the day advances and a
+            // possible earthquake could otherwise steal the blame.
+            yield return null;
+            while (!blockTowerManager.IsSettled()) yield return null;
+            if (isGameOver) yield break;
+
+            AdvanceDay();
+            PickNextShape();
+            currentTurn = Turn.Player;
+            npcTurnCoroutine = null;
+            RefreshUI(null);
         }
 
         public void StartNewGame()
@@ -150,9 +212,10 @@ namespace EarthquakeGame
 
             int year = UnityEngine.Random.Range(minStartYear, maxStartYear + 1);
             currentDate = new DateTime(year, 1, 1);
-            daysPerRound = DateTime.IsLeapYear(year) ? 366 : 365;
             survivalDays = 0;
-            isRoundOver = false;
+            isGameOver = false;
+            currentTurn = Turn.Player;
+            if (npcTurnCoroutine != null) { StopCoroutine(npcTurnCoroutine); npcTurnCoroutine = null; }
             PickNextShape();
 
             // Start wherever that year's single strongest earthquake hit,
@@ -248,7 +311,7 @@ namespace EarthquakeGame
         // Called by MapManager when a prefecture button is clicked.
         public void OnPrefectureClicked(string prefectureName)
         {
-            if (isRoundOver) return;
+            if (isGameOver) return;
             playerManager.TryMoveTo(prefectureName);
             RefreshUI(null);
         }
@@ -303,6 +366,9 @@ namespace EarthquakeGame
             bool feltShake = playerFeltRank >= minFeltRankToShake;
             if (feltShake)
             {
+                // Any block that falls during this shake is the player's
+                // loss - it's their location choice that exposed the tower.
+                pendingFallCause = FallCause.Earthquake;
                 if (blockTowerManager != null) blockTowerManager.Shake(playerFeltRank);
                 if (cameraShaker != null) cameraShaker.Shake(playerFeltRank);
                 if (earthquakeSoundPlayer != null) earthquakeSoundPlayer.PlayRumble(playerFeltRank);
@@ -324,11 +390,6 @@ namespace EarthquakeGame
             }
 
             RefreshUI(playerEvent);
-
-            if (survivalDays >= daysPerRound)
-            {
-                EndRound();
-            }
         }
 
         private IEnumerator ShowEarthquakeAlert(EarthquakeEvent displayEvent, EarthquakeEvent playerEvent, bool feltShake)
@@ -397,31 +458,24 @@ namespace EarthquakeGame
             fortuneAnimationCoroutine = null;
         }
 
-        private void EndRound()
+        private void ShowGameOver(bool playerLost)
         {
-            isRoundOver = true;
-            int finalScore = blockTowerManager != null ? blockTowerManager.GetScore() : 0;
-            int finalCount = blockTowerManager != null ? blockTowerManager.AliveBlockCount : 0;
-            int maxCount = blockTowerManager != null ? blockTowerManager.MaxBlockCountReached : 0;
-            float finalHeight = blockTowerManager != null ? blockTowerManager.CurrentHeight : 0f;
-            float maxHeight = blockTowerManager != null ? blockTowerManager.MaxHeightReached : 0f;
-
             if (roundEndPanel != null) roundEndPanel.SetActive(true);
             if (roundEndScoreText != null)
             {
-                roundEndScoreText.text =
-                    $"1年間、生き延びました。\n" +
-                    $"最終スコア：{finalScore}点（個数＋高さ）\n" +
-                    $"個数：{finalCount}個（最高{maxCount}個）\n" +
-                    $"高さ：{finalHeight:0.0}m（最高{maxHeight:0.0}m）";
+                int finalCount = blockTowerManager != null ? blockTowerManager.AliveBlockCount : 0;
+                roundEndScoreText.text = playerLost
+                    ? $"あなたの積んだブロックが崩れました…\nNPCの勝ち！\n（{survivalDays}日目、{finalCount}個まで積み上がっていました）"
+                    : $"NPCの積んだブロックが崩れました！\nあなたの勝ち！\n（{survivalDays}日目、{finalCount}個まで積み上がっていました）";
             }
         }
 
         private void RefreshUI(EarthquakeEvent latestEvent)
         {
             if (dateText != null) dateText.text = $"日付：{currentDate:yyyy年M月d日}";
-            if (survivalDaysText != null) survivalDaysText.text = $"経過日数：{survivalDays}/{daysPerRound}日";
+            if (survivalDaysText != null) survivalDaysText.text = $"経過日数：{survivalDays}日目";
             if (currentPrefectureText != null) currentPrefectureText.text = $"現在地：{playerManager.CurrentPrefecture}";
+            if (turnText != null) turnText.text = currentTurn == Turn.Player ? "あなたの番です" : "NPCの番です…";
 
             if (latestEarthquakeText != null)
             {
@@ -445,22 +499,6 @@ namespace EarthquakeGame
             if (forecastMapView != null)
             {
                 forecastMapView.SetPlayerPosition(playerManager.CurrentPrefecture);
-            }
-
-            if (blockTowerManager != null)
-            {
-                if (scoreText != null)
-                {
-                    scoreText.text = $"スコア：{blockTowerManager.GetScore()}点（個数＋高さ）";
-                }
-                if (countStatsText != null)
-                {
-                    countStatsText.text = $"個数：現在{blockTowerManager.AliveBlockCount}個／最高{blockTowerManager.MaxBlockCountReached}個";
-                }
-                if (heightStatsText != null)
-                {
-                    heightStatsText.text = $"高さ：現在{blockTowerManager.CurrentHeight:0.0}m／最高{blockTowerManager.MaxHeightReached:0.0}m";
-                }
             }
         }
 
