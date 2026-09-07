@@ -12,10 +12,12 @@ namespace EarthquakeGame
     // together, and drives the minimal UI.
     //
     // Player and NPC share one tower and alternate turns dropping blocks.
-    // The moment any block falls - whether from a bad placement or from an
-    // earthquake shake - whoever was "responsible" loses immediately:
-    // the mover who dropped the block that started it, or the player if an
-    // earthquake (tied to the player's own location) causes the fall.
+    // When any block falls, whoever was "responsible" concedes a point - the
+    // mover who dropped the block that started it, or the player if an
+    // earthquake (tied to the player's own location) brought it down. The
+    // tower is then rebuilt and play continues from the next day, so a whole
+    // year of real earthquake data gets used. On December 31st the side with
+    // fewer collapses wins.
     public class GameManager : MonoBehaviour
     {
         private enum Turn { Player, Npc }
@@ -44,6 +46,8 @@ namespace EarthquakeGame
 
         [Tooltip("Seconds the NPC waits before dropping its block, so its turn reads clearly instead of happening instantly.")]
         public float npcThinkDelay = 0.8f;
+        [Tooltip("In-game days one full turn (player + NPC) consumes. A whole year is played through at this pace.")]
+        public int daysPerTurn = 3;
         public Difficulty difficulty = Difficulty.Easy;
 
         [Header("NPC skill per difficulty")]
@@ -75,6 +79,7 @@ namespace EarthquakeGame
         public Text latestEarthquakeText;
         public Text turnText;
         public Image turnBadge;
+        public Text scoreText;
         public Text difficultyText;
         public Text difficultyBadgeText;
         public Button easyButton;
@@ -110,6 +115,9 @@ namespace EarthquakeGame
 
         private DateTime currentDate;
         private int survivalDays;
+        private int daysInSeason;
+        private int playerCollapses;
+        private int npcCollapses;
         private bool isGameOver;
         private Turn currentTurn;
         private FallCause pendingFallCause;
@@ -135,18 +143,28 @@ namespace EarthquakeGame
             if (bgmPlayer != null) bgmPlayer.Play();
         }
 
-        // Sudden death: the first block to fall ends the game. Whoever
+        // A collapse is a conceded point, not the end of the game. Whoever
         // caused it - the mover who placed the block that started the
-        // topple, or the player if it was an earthquake - loses.
+        // topple, or the player if it was an earthquake - gives up a point,
+        // the rubble is cleared, and building resumes the next day.
         private void HandleBlockFell()
         {
             if (isGameOver) return;
-            isGameOver = true;
-            if (npcTurnCoroutine != null) { StopCoroutine(npcTurnCoroutine); npcTurnCoroutine = null; }
+            if (blockTowerManager == null || blockTowerManager.AliveBlockCount == 0) return;
 
-            bool playerLost = pendingFallCause != FallCause.NpcPlacement;
-            ShowGameOver(playerLost);
+            bool playerAtFault = pendingFallCause != FallCause.NpcPlacement;
+            if (playerAtFault) playerCollapses++;
+            else npcCollapses++;
+
+            lastCollapseMessage = playerAtFault
+                ? "あなたのブロックが崩れた！ ライバルに1点"
+                : "ライバルのブロックが崩れた！ あなたに1点";
+
+            blockTowerManager.ClearAllBlocks();
+            RefreshUI(null);
         }
+
+        private string lastCollapseMessage = "";
 
         // Called by the title screen's "スタート" button.
         public void OnStartButtonClicked()
@@ -293,7 +311,12 @@ namespace EarthquakeGame
 
             int year = UnityEngine.Random.Range(minStartYear, maxStartYear + 1);
             currentDate = new DateTime(year, 1, 1);
+            // Minus one so the last day stepped onto is December 31st.
+            daysInSeason = (DateTime.IsLeapYear(year) ? 366 : 365) - 1;
             survivalDays = 0;
+            playerCollapses = 0;
+            npcCollapses = 0;
+            lastCollapseMessage = "";
             isGameOver = false;
             currentTurn = Turn.Player;
             if (npcTurnCoroutine != null) { StopCoroutine(npcTurnCoroutine); npcTurnCoroutine = null; }
@@ -403,23 +426,61 @@ namespace EarthquakeGame
             RefreshUI(null);
         }
 
+        // One turn covers several days at once, so a full year fits in a
+        // reasonable number of turns. Every day in the span is checked, and
+        // the strongest shaking among them is the one that hits the tower.
         private void AdvanceDay()
         {
-            currentDate = currentDate.AddDays(1);
-            survivalDays++;
+            EarthquakeEvent strongestFelt = null;
+            int strongestFeltRank = 0;
+            EarthquakeEvent headline = null;
+            int headlineRank = -1;
 
+            for (int step = 0; step < Mathf.Max(1, daysPerTurn) && survivalDays < daysInSeason; step++)
+            {
+                currentDate = currentDate.AddDays(1);
+                survivalDays++;
+                playerManager.AdvanceOneDay();
+
+                ScanDay(ref strongestFelt, ref strongestFeltRank, ref headline, ref headlineRank);
+
+                if (fortuneTeller != null && currentDate.Day == 1)
+                {
+                    currentForecast = fortuneTeller.GetMonthlyForecast(currentDate);
+                    if (forecastMapView != null) forecastMapView.SetIntensities(fortuneTeller.LastForecastIntensities);
+                    PlayFortuneAnimation();
+                }
+            }
+
+            bool feltShake = strongestFeltRank >= minFeltRankToShake;
+            if (feltShake)
+            {
+                // Any block that falls during this shake is the player's
+                // point conceded - it's their location choice that exposed
+                // the tower.
+                pendingFallCause = FallCause.Earthquake;
+                if (blockTowerManager != null) blockTowerManager.Shake(strongestFeltRank);
+                if (cameraShaker != null) cameraShaker.Shake(strongestFeltRank);
+                if (earthquakeSoundPlayer != null) earthquakeSoundPlayer.PlayRumble(strongestFeltRank);
+            }
+
+            if (headline != null)
+            {
+                if (earthquakeAlertCoroutine != null) StopCoroutine(earthquakeAlertCoroutine);
+                earthquakeAlertCoroutine = StartCoroutine(ShowEarthquakeAlert(headline, strongestFelt, feltShake));
+            }
+
+            RefreshUI(strongestFelt);
+
+            if (survivalDays >= daysInSeason) EndSeason();
+        }
+
+        // Folds one day's earthquakes into the running "strongest so far"
+        // for this turn: what the site felt, and the day's biggest news.
+        private void ScanDay(ref EarthquakeEvent strongestFelt, ref int strongestFeltRank,
+                             ref EarthquakeEvent headline, ref int headlineRank)
+        {
             var todaysEvents = earthquakeManager.GetEarthquakesOn(currentDate);
-
-            // What the player actually feels at their own location (used
-            // for shake/sound and the "your area" line in the HUD).
-            int playerFeltRank = 0;
-            EarthquakeEvent playerEvent = null;
-
-            // The day's most notable earthquake anywhere in Japan (used for
-            // the alert banner + intensity map, shown even if it didn't
-            // reach the player's own prefecture at all).
-            EarthquakeEvent mostNotableEvent = null;
-            int mostNotableRank = -1;
 
             foreach (var ev in todaysEvents)
             {
@@ -427,10 +488,10 @@ namespace EarthquakeGame
                 // player's prefecture, never by where the epicenter was.
                 string intensity = ev.GetIntensityFor(playerManager.CurrentPrefecture);
                 int rank = intensity != null ? IntensityScale.ToRank(intensity) : 0;
-                if (rank > playerFeltRank)
+                if (rank > strongestFeltRank)
                 {
-                    playerFeltRank = rank;
-                    playerEvent = ev;
+                    strongestFeltRank = rank;
+                    strongestFelt = ev;
                 }
 
                 int evMaxRank = 0;
@@ -439,44 +500,12 @@ namespace EarthquakeGame
                     int r = IntensityScale.ToRank(kv.Value);
                     if (r > evMaxRank) evMaxRank = r;
                 }
-                if (evMaxRank > mostNotableRank)
+                if (evMaxRank > headlineRank)
                 {
-                    mostNotableRank = evMaxRank;
-                    mostNotableEvent = ev;
+                    headlineRank = evMaxRank;
+                    headline = ev;
                 }
             }
-
-            // Real-world threshold: people generally don't notice shaking
-            // below shindo 3, so neither the tower nor the camera/sound
-            // react below that, even if the JSON technically recorded a
-            // weaker intensity (1/2) for this prefecture.
-            bool feltShake = playerFeltRank >= minFeltRankToShake;
-            if (feltShake)
-            {
-                // Any block that falls during this shake is the player's
-                // loss - it's their location choice that exposed the tower.
-                pendingFallCause = FallCause.Earthquake;
-                if (blockTowerManager != null) blockTowerManager.Shake(playerFeltRank);
-                if (cameraShaker != null) cameraShaker.Shake(playerFeltRank);
-                if (earthquakeSoundPlayer != null) earthquakeSoundPlayer.PlayRumble(playerFeltRank);
-            }
-
-            if (mostNotableEvent != null)
-            {
-                if (earthquakeAlertCoroutine != null) StopCoroutine(earthquakeAlertCoroutine);
-                earthquakeAlertCoroutine = StartCoroutine(ShowEarthquakeAlert(mostNotableEvent, playerEvent, feltShake));
-            }
-
-            playerManager.AdvanceOneDay();
-
-            if (fortuneTeller != null && currentDate.Day == 1)
-            {
-                currentForecast = fortuneTeller.GetMonthlyForecast(currentDate);
-                if (forecastMapView != null) forecastMapView.SetIntensities(fortuneTeller.LastForecastIntensities);
-                PlayFortuneAnimation();
-            }
-
-            RefreshUI(playerEvent);
         }
 
         private IEnumerator ShowEarthquakeAlert(EarthquakeEvent displayEvent, EarthquakeEvent playerEvent, bool feltShake)
@@ -544,36 +573,39 @@ namespace EarthquakeGame
             fortuneAnimationCoroutine = null;
         }
 
-        private void ShowGameOver(bool playerLost)
+        // December 31st: the side that dropped the tower fewer times wins.
+        private void EndSeason()
         {
+            if (isGameOver) return;
+            isGameOver = true;
+
+            bool draw = playerCollapses == npcCollapses;
+            bool playerWon = npcCollapses > playerCollapses;
+
             if (roundEndPanel != null) roundEndPanel.SetActive(true);
 
             if (roundEndTitleText != null)
             {
-                roundEndTitleText.text = playerLost ? "敗　北" : "勝　利";
-                roundEndTitleText.color = playerLost ? BlockTowerManager.NpcBlockColor : BlockTowerManager.PlayerBlockColor;
+                roundEndTitleText.text = draw ? "引き分け" : playerWon ? "勝　利" : "敗　北";
+                roundEndTitleText.color = draw
+                    ? Color.white
+                    : playerWon ? BlockTowerManager.PlayerBlockColor : BlockTowerManager.NpcBlockColor;
             }
 
             if (roundEndScoreText != null)
             {
-                int finalCount = blockTowerManager != null ? blockTowerManager.AliveBlockCount : 0;
-                string cause = pendingFallCause == FallCause.Earthquake
-                    ? $"{playerManager.CurrentPrefecture}を襲った地震でタワーが崩れました。"
-                    : playerLost
-                        ? "あなたが置いたブロックがタワーを崩しました。"
-                        : "NPCが置いたブロックがタワーを崩しました。";
-
                 roundEndScoreText.text =
-                    $"{cause}\n\n" +
-                    $"{survivalDays}日目　／　{finalCount}個まで積み上げました";
+                    $"{currentDate:yyyy年}を戦い抜きました\n\n" +
+                    $"崩した回数　あなた {playerCollapses}　／　ライバル {npcCollapses}";
             }
         }
 
         private void RefreshUI(EarthquakeEvent latestEvent)
         {
             if (dateText != null) dateText.text = $"{currentDate:yyyy年M月d日}";
-            if (survivalDaysText != null) survivalDaysText.text = $"{survivalDays}日目";
+            if (survivalDaysText != null) survivalDaysText.text = $"残り {Mathf.Max(0, daysInSeason - survivalDays)}日";
             if (currentPrefectureText != null) currentPrefectureText.text = playerManager.CurrentPrefecture;
+            if (scoreText != null) scoreText.text = $"崩した回数　あなた {playerCollapses}　－　ライバル {npcCollapses}";
 
             bool playerTurn = currentTurn == Turn.Player;
             if (turnText != null) turnText.text = playerTurn ? "あなたの番" : "NPC 思考中…";
@@ -584,10 +616,12 @@ namespace EarthquakeGame
 
             if (latestEarthquakeText != null)
             {
-                latestEarthquakeText.text = latestEvent == null
-                    ? "まだ地震は起きていません"
-                    : $"震央 {latestEvent.epicenter}　M{latestEvent.magnitude}\n" +
-                      $"現在地の震度 {latestEvent.GetIntensityFor(playerManager.CurrentPrefecture) ?? "－"}";
+                latestEarthquakeText.text = latestEvent != null
+                    ? $"震央 {latestEvent.epicenter}　M{latestEvent.magnitude}\n" +
+                      $"現在地の震度 {latestEvent.GetIntensityFor(playerManager.CurrentPrefecture) ?? "－"}"
+                    : string.IsNullOrEmpty(lastCollapseMessage)
+                        ? "まだ地震は起きていません"
+                        : lastCollapseMessage;
             }
 
             if (mapManager != null)

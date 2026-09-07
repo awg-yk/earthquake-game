@@ -70,14 +70,15 @@ public static class SceneBuilder
         Vector2 bottomCenter = new Vector2(0.5f, 0f);
         Vector2 bottomRight = new Vector2(1f, 0f);
 
-        // --- Top center: date / day / location, plus the turn badge -------
-        RectTransform infoCard = CreateCard(canvas.transform, "InfoCard", topCenter, topCenter, 0, -18, 440, 122);
-        Text dateText = CreateLabel(infoCard, "DateText", topCenter, topCenter, 0, -14, 400, 26, 15, "2000年1月1日", TextMuted, TextAnchor.UpperCenter);
-        Text survivalDaysText = CreateLabel(infoCard, "SurvivalDaysText", topCenter, topCenter, 0, -40, 400, 26, 15, "0日目", TextMuted, TextAnchor.UpperCenter);
-        Text currentPrefectureText = CreateLabel(infoCard, "CurrentPrefectureText", topCenter, topCenter, 0, -66, 400, 44, 26, "東京都", TextPrimary, TextAnchor.UpperCenter);
+        // --- Top center: date / location / running score, plus turn badge --
+        RectTransform infoCard = CreateCard(canvas.transform, "InfoCard", topCenter, topCenter, 0, -18, 440, 146);
+        Text dateText = CreateLabel(infoCard, "DateText", topCenter, topCenter, 0, -12, 400, 26, 15, "2000年1月1日", TextMuted, TextAnchor.UpperCenter);
+        Text survivalDaysText = CreateLabel(infoCard, "SurvivalDaysText", topCenter, topCenter, 0, -36, 400, 26, 15, "残り 364日", TextMuted, TextAnchor.UpperCenter);
+        Text currentPrefectureText = CreateLabel(infoCard, "CurrentPrefectureText", topCenter, topCenter, 0, -62, 400, 44, 26, "東京都", TextPrimary, TextAnchor.UpperCenter);
         currentPrefectureText.fontStyle = FontStyle.Bold;
+        Text scoreText = CreateLabel(infoCard, "ScoreText", topCenter, topCenter, 0, -110, 410, 28, 15, "崩した回数　あなた 0　－　ライバル 0", TextPrimary, TextAnchor.UpperCenter);
 
-        Image turnBadge = CreateBadge(canvas.transform, "TurnBadge", topCenter, topCenter, 0, -152, 240, 46, PlayerColor, out Text turnText);
+        Image turnBadge = CreateBadge(canvas.transform, "TurnBadge", topCenter, topCenter, 0, -176, 240, 46, PlayerColor, out Text turnText);
         turnText.text = "あなたの番";
 
         // --- Top left: this month's forecast map + difficulty badge -------
@@ -153,6 +154,7 @@ public static class SceneBuilder
         gameManager.latestEarthquakeText = latestEarthquakeText;
         gameManager.turnText = turnText;
         gameManager.turnBadge = turnBadge;
+        gameManager.scoreText = scoreText;
         gameManager.difficultyText = difficultyText;
         gameManager.difficultyBadgeText = difficultyBadgeText;
         gameManager.easyButton = easyButton;
@@ -619,10 +621,11 @@ public static class SceneBuilder
         Text titleText = CreateLabel(panel.transform, "TitleText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 108, 900, 100, 46, "日本地震サバイバル", TextPrimary, TextAnchor.MiddleCenter);
         titleText.fontStyle = FontStyle.Bold;
 
-        CreateLabel(panel.transform, "SubtitleText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -20, 860, 100, 17,
+        CreateLabel(panel.transform, "SubtitleText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -20, 880, 110, 17,
             "NPCと交互に、同じ土台へブロックを積み上げる。\n" +
             "都道府県を移動すると、その土地に実際に起きた地震が土台を揺らす。\n" +
-            "先にブロックを崩した側の負け。",
+            "崩した側が1点を失い、積み直して続行。\n" +
+            "12月31日まで戦い、崩した回数の少ない方が勝ち。",
             TextMuted, TextAnchor.MiddleCenter);
 
         difficultyText = CreateLabel(panel.transform, "DifficultyText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -96, 900, 28, 15, "難易度：EASY", AccentCyan, TextAnchor.MiddleCenter);
