@@ -106,7 +106,10 @@ namespace EarthquakeGame
             return new Vector2(blockSize * elongation, blockSize / elongation);
         }
 
-        public Block PlaceBlock(Vector2 size, float xPosition, float rotationDegrees = 0f)
+        public static readonly Color PlayerBlockColor = new Color(0.85f, 0.25f, 0.25f);
+        public static readonly Color NpcBlockColor = new Color(0.25f, 0.45f, 0.85f);
+
+        public Block PlaceBlock(Vector2 size, float xPosition, float rotationDegrees, Color color)
         {
             xPosition = ClampX(xPosition);
             float spawnY = GetCurrentTowerTopY() + spawnHeightMargin;
@@ -115,7 +118,6 @@ namespace EarthquakeGame
             obj.transform.position = new Vector3(xPosition, spawnY, 0);
             obj.transform.rotation = Quaternion.Euler(0, 0, rotationDegrees);
 
-            Color color = new Color(0.85f, 0.45f, 0.4f);
             ShapeMeshFactory.Apply(obj, size, color);
 
             var collider = obj.GetComponent<Collider2D>();

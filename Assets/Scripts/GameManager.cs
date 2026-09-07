@@ -20,6 +20,7 @@ namespace EarthquakeGame
     {
         private enum Turn { Player, Npc }
         private enum FallCause { PlayerPlacement, NpcPlacement, Earthquake }
+        public enum Difficulty { Easy, Normal, Hard }
 
         [Header("Managers")]
         public PlayerManager playerManager;
@@ -43,8 +44,8 @@ namespace EarthquakeGame
 
         [Tooltip("Seconds the NPC waits before dropping its block, so its turn reads clearly instead of happening instantly.")]
         public float npcThinkDelay = 0.8f;
-        [Tooltip("How far from center (as a fraction of the placeable width) the NPC's random drop position can land.")]
-        public float npcAimJitter = 0.8f;
+        public Difficulty difficulty = Difficulty.Easy;
+        public Text difficultyText;
 
         [Header("UI (Text can be swapped for TMP_Text)")]
         public Text dateText;
@@ -123,6 +124,21 @@ namespace EarthquakeGame
             if (titleScreenPanel != null) titleScreenPanel.SetActive(false);
         }
 
+        // Called by the title screen's difficulty buttons.
+        public void SetDifficultyEasy() => SetDifficulty(Difficulty.Easy);
+        public void SetDifficultyNormal() => SetDifficulty(Difficulty.Normal);
+        public void SetDifficultyHard() => SetDifficulty(Difficulty.Hard);
+
+        private void SetDifficulty(Difficulty value)
+        {
+            difficulty = value;
+            if (difficultyText != null)
+            {
+                string label = value == Difficulty.Easy ? "EASY" : value == Difficulty.Normal ? "NORMAL" : "HARD";
+                difficultyText.text = $"難易度：{label}";
+            }
+        }
+
         // Follows the mouse to preview where a block will drop, and places
         // one (which also advances the day) on left click - as long as the
         // click isn't on top of a UI element (shape buttons, panels, etc).
@@ -163,7 +179,7 @@ namespace EarthquakeGame
             if (!overUI && Input.GetMouseButtonDown(0) && blockTowerManager.IsSettled())
             {
                 pendingFallCause = FallCause.PlayerPlacement;
-                blockTowerManager.PlaceBlock(selectedSize, x, selectedRotation);
+                blockTowerManager.PlaceBlock(selectedSize, x, selectedRotation, BlockTowerManager.PlayerBlockColor);
                 BeginNpcTurn();
             }
         }
@@ -185,11 +201,15 @@ namespace EarthquakeGame
             if (isGameOver) yield break;
 
             Vector2 npcSize = blockTowerManager.GetBlockSize();
-            float x = UnityEngine.Random.Range(-npcAimJitter, npcAimJitter) * blockTowerManager.baseHalfWidth;
-            float rotation = UnityEngine.Random.Range(-30f, 30f);
+            // Harder difficulties aim closer to center and rotate less
+            // wildly, so the NPC is less likely to knock itself over.
+            float aimJitter = difficulty == Difficulty.Hard ? 0.15f : difficulty == Difficulty.Normal ? 0.4f : 0.8f;
+            float rotationRange = difficulty == Difficulty.Hard ? 5f : difficulty == Difficulty.Normal ? 15f : 30f;
+            float x = UnityEngine.Random.Range(-aimJitter, aimJitter) * blockTowerManager.baseHalfWidth;
+            float rotation = UnityEngine.Random.Range(-rotationRange, rotationRange);
 
             pendingFallCause = FallCause.NpcPlacement;
-            blockTowerManager.PlaceBlock(npcSize, x, rotation);
+            blockTowerManager.PlaceBlock(npcSize, x, rotation, BlockTowerManager.NpcBlockColor);
 
             // Let the NPC's own block finish settling (and any resulting
             // fall get attributed to it) before the day advances and a
@@ -271,7 +291,8 @@ namespace EarthquakeGame
                 DestroyImmediate(comp);
             }
 
-            Color color = new Color(0.85f, 0.45f, 0.4f, 0.6f);
+            Color color = BlockTowerManager.PlayerBlockColor;
+            color.a = 0.6f;
             ShapeMeshFactory.Apply(shapePreview, selectedSize, color, addCollider: false);
         }
 

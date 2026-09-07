@@ -33,18 +33,24 @@ public static class SceneBuilder
         CreateEventSystem();
 
         Vector2 topLeft = new Vector2(0f, 1f);
-        Text dateText = CreateTextAnchored(canvas.transform, "DateText", topLeft, topLeft, 20, -20, 380, 40, 22, "日付：2000年1月1日");
-        Text survivalDaysText = CreateTextAnchored(canvas.transform, "SurvivalDaysText", topLeft, topLeft, 20, -55, 380, 40, 22, "経過日数：0日目");
-        Text currentPrefectureText = CreateTextAnchored(canvas.transform, "CurrentPrefectureText", topLeft, topLeft, 20, -90, 380, 40, 22, "現在地：東京都");
-        Text turnText = CreateTextAnchored(canvas.transform, "TurnText", topLeft, topLeft, 20, -125, 380, 34, 22, "あなたの番です");
+        Vector2 topCenter = new Vector2(0.5f, 1f);
+        Text dateText = CreateTextAnchored(canvas.transform, "DateText", topCenter, topCenter, 0, -20, 380, 40, 22, "日付：2000年1月1日");
+        dateText.alignment = TextAnchor.UpperCenter;
+        Text survivalDaysText = CreateTextAnchored(canvas.transform, "SurvivalDaysText", topCenter, topCenter, 0, -55, 380, 40, 22, "経過日数：0日目");
+        survivalDaysText.alignment = TextAnchor.UpperCenter;
+        Text currentPrefectureText = CreateTextAnchored(canvas.transform, "CurrentPrefectureText", topCenter, topCenter, 0, -90, 380, 40, 22, "現在地：東京都");
+        currentPrefectureText.alignment = TextAnchor.UpperCenter;
+        Text turnText = CreateTextAnchored(canvas.transform, "TurnText", topCenter, topCenter, 0, -125, 380, 34, 22, "あなたの番です");
+        turnText.alignment = TextAnchor.UpperCenter;
         turnText.fontStyle = FontStyle.Bold;
         turnText.color = new Color(0.1f, 0.4f, 0.85f);
-        Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topLeft, topLeft, 20, -165, 380, 140, 18, "最新の地震：なし");
+        Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topCenter, topCenter, 0, -165, 380, 140, 18, "最新の地震：なし");
+        latestEarthquakeText.alignment = TextAnchor.UpperCenter;
 
-        // Persistent left-side map showing this month's forecasted warning
-        // areas (震度2以上), unlike the right-side one which only flashes
-        // briefly for earthquake alerts. Placed below the HUD text column.
-        IntensityMapView forecastMapView = CreateIntensityMapPanel(canvas.transform, "ForecastMapPanel", topLeft, topLeft, 20, -315, "今月の警戒マップ");
+        // Persistent top-left map showing this month's forecasted warning
+        // areas (震度2以上), unlike the top-right one which only flashes
+        // briefly for today's earthquake alerts.
+        IntensityMapView forecastMapView = CreateIntensityMapPanel(canvas.transform, "ForecastMapPanel", topLeft, topLeft, 20, -20, "今月の警戒マップ");
 
         GameObject buttonContainer = CreateButtonContainer(canvas.transform);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
@@ -73,7 +79,7 @@ public static class SceneBuilder
 
         GameObject fortuneAnimationPanel = CreateFortuneAnimationPanel(canvas.transform, out Text fortuneAnimationText, out Transform fortuneAnimationIcon);
 
-        GameObject titleScreenPanel = CreateTitleScreenPanel(canvas.transform, out Button startButton);
+        GameObject titleScreenPanel = CreateTitleScreenPanel(canvas.transform, out Button startButton, out Button easyButton, out Button normalButton, out Button hardButton, out Text difficultyText);
 
         // --- Managers ---
         GameObject gameManagerObj = new GameObject("GameManager");
@@ -116,6 +122,7 @@ public static class SceneBuilder
         gameManager.intensityMapView = intensityMapView;
         gameManager.forecastMapView = forecastMapView;
         gameManager.titleScreenPanel = titleScreenPanel;
+        gameManager.difficultyText = difficultyText;
         gameManager.fortuneAnimationPanel = fortuneAnimationPanel;
         gameManager.fortuneAnimationText = fortuneAnimationText;
         gameManager.fortuneAnimationIcon = fortuneAnimationIcon;
@@ -129,6 +136,9 @@ public static class SceneBuilder
         UnityEventTools.AddVoidPersistentListener(rotateRightButton.onClick, gameManager.RotateRight);
         UnityEventTools.AddVoidPersistentListener(restartButton.onClick, gameManager.OnRestartClicked);
         UnityEventTools.AddVoidPersistentListener(startButton.onClick, gameManager.OnStartButtonClicked);
+        UnityEventTools.AddVoidPersistentListener(easyButton.onClick, gameManager.SetDifficultyEasy);
+        UnityEventTools.AddVoidPersistentListener(normalButton.onClick, gameManager.SetDifficultyNormal);
+        UnityEventTools.AddVoidPersistentListener(hardButton.onClick, gameManager.SetDifficultyHard);
 
         roundEndPanel.SetActive(false);
 
@@ -305,26 +315,34 @@ public static class SceneBuilder
     // game underneath is already initialized (Start() runs StartNewGame()
     // as usual); this panel just blocks input until the player presses
     // start, then hides itself.
-    private static GameObject CreateTitleScreenPanel(Transform parent, out Button startButton)
+    private static GameObject CreateTitleScreenPanel(Transform parent, out Button startButton, out Button easyButton, out Button normalButton, out Button hardButton, out Text difficultyText)
     {
         GameObject panel = new GameObject("TitleScreenPanel");
         SetupRect(panel, parent, 0, 0, 1280, 720);
         Image panelImage = panel.AddComponent<Image>();
         panelImage.color = new Color(0.08f, 0.1f, 0.16f, 0.97f);
 
-        Text titleText = CreateText(panel.transform, "TitleText", 0, 80, 900, 140, 48, "日本地震サバイバル\n積み木タワー");
+        Text titleText = CreateText(panel.transform, "TitleText", 0, 100, 900, 140, 48, "日本地震サバイバル\n積み木タワー");
         titleText.alignment = TextAnchor.MiddleCenter;
         titleText.color = Color.white;
         titleText.fontStyle = FontStyle.Bold;
 
-        Text subtitleText = CreateText(panel.transform, "SubtitleText", 0, -20, 900, 100, 20,
-            "都道府県を移動しながら、四角・三角・丸の積み木を積み上げよう。\n" +
+        Text subtitleText = CreateText(panel.transform, "SubtitleText", 0, 0, 900, 90, 20,
+            "都道府県を移動しながら、NPCと交互に積み木を積み上げよう。\n" +
             "地震が来ると土台が揺れ、積み木が崩れることがある。\n" +
-            "1年生き延びた時点で、残った積み木の数と形からスコアが決まる。");
+            "先にブロックを崩した方の負け！");
         subtitleText.alignment = TextAnchor.MiddleCenter;
         subtitleText.color = new Color(0.85f, 0.85f, 0.9f);
 
-        startButton = CreateButton(panel.transform, "StartButton", 0, -150, 240, 70, "スタート");
+        difficultyText = CreateText(panel.transform, "DifficultyText", 0, -80, 900, 30, 18, "難易度：EASY");
+        difficultyText.alignment = TextAnchor.MiddleCenter;
+        difficultyText.color = new Color(0.85f, 0.85f, 0.9f);
+
+        easyButton = CreateButton(panel.transform, "EasyButton", -220, -130, 140, 50, "EASY");
+        normalButton = CreateButton(panel.transform, "NormalButton", 0, -130, 140, 50, "NORMAL");
+        hardButton = CreateButton(panel.transform, "HardButton", 220, -130, 140, 50, "HARD");
+
+        startButton = CreateButton(panel.transform, "StartButton", 0, -210, 240, 70, "スタート");
 
         return panel;
     }
@@ -414,7 +432,7 @@ public static class SceneBuilder
     {
         // Top-right corner, above the prefecture button list (which is
         // positioned below this panel - see CreateButtonContainer).
-        return CreateIntensityMapPanel(parent, "IntensityMapPanel", new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -20, "震度マップ");
+        return CreateIntensityMapPanel(parent, "IntensityMapPanel", new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -20, "今日の震度マップ");
     }
 
     // Generic version so the same map (shapes/legend/player marker) can be
