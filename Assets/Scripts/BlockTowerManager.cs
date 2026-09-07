@@ -10,8 +10,8 @@ namespace EarthquakeGame
     // player's location.
     public class BlockTowerManager : MonoBehaviour
     {
-        // Fired (once per frame, after the fallen blocks are cleaned up) when
-        // this tower loses a block - i.e. the building has collapsed.
+        // Fired the moment any block falls off the tower - used by
+        // GameManager to end the Player-vs-NPC duel in sudden death.
         public event Action OnBlockFell;
 
         [Header("Base platform")]
@@ -89,30 +89,15 @@ namespace EarthquakeGame
         public int AliveBlockCount => aliveBlocks.Count;
         public float CurrentHeight => GetCurrentTowerTopY() - GetBaseTopY();
 
-        // The strongest shaking this particular building has stood through.
-        // It is the building's track record, and it multiplies the payout at
-        // handover - it resets to zero the moment the tower is cleared.
-        public int MaxShindoRankSurvived { get; private set; }
-
-        public void RegisterShake(int intensityRank)
-        {
-            if (aliveBlocks.Count == 0) return; // nothing standing to certify
-            if (intensityRank > MaxShindoRankSurvived) MaxShindoRankSurvived = intensityRank;
-        }
-
-        // Center of this tower's own pedestal, so two towers can stand side
-        // by side and each still aim/clamp around its own site.
-        public float BaseCenterX => baseRigidbody != null ? basePlatformRestPosition.x : 0f;
-
         // Height at which the next block would be dropped, useful for
         // showing the player a "landing here" preview before they commit.
         public float GetNextSpawnY() => GetCurrentTowerTopY() + spawnHeightMargin;
 
-        // Keeps a placement X position within this tower's own pedestal.
+        // Keeps a placement X position within the base platform's bounds.
         public float ClampX(float xPosition)
         {
             float margin = blockSize * elongation * 0.5f;
-            return Mathf.Clamp(xPosition, BaseCenterX - baseHalfWidth + margin, BaseCenterX + baseHalfWidth - margin);
+            return Mathf.Clamp(xPosition, -baseHalfWidth + margin, baseHalfWidth - margin);
         }
 
         // The single fixed block size, exposed so the preview (GameManager)
@@ -131,7 +116,7 @@ namespace EarthquakeGame
         public float GetTowerTopCenterX()
         {
             float highest = float.NegativeInfinity;
-            float centerX = BaseCenterX;
+            float centerX = 0f;
 
             foreach (var block in aliveBlocks)
             {
@@ -145,7 +130,7 @@ namespace EarthquakeGame
                 }
             }
 
-            return centerX;
+            return float.IsNegativeInfinity(highest) ? 0f : centerX;
         }
 
         // dropHeight overrides spawnHeightMargin for this one block: dropping
@@ -227,7 +212,6 @@ namespace EarthquakeGame
 
         void Update()
         {
-            bool anyFell = false;
             for (int i = aliveBlocks.Count - 1; i >= 0; i--)
             {
                 var block = aliveBlocks[i];
@@ -235,13 +219,9 @@ namespace EarthquakeGame
                 {
                     aliveBlocks.RemoveAt(i);
                     if (block != null) Destroy(block.gameObject);
-                    anyFell = true;
+                    OnBlockFell?.Invoke();
                 }
             }
-
-            // Raised after the sweep, never inside it, so a listener is free
-            // to clear the whole tower without corrupting this loop.
-            if (anyFell) OnBlockFell?.Invoke();
         }
 
         public void ClearAllBlocks()
@@ -252,7 +232,6 @@ namespace EarthquakeGame
             }
             aliveBlocks.Clear();
             lastPlacedRigidbody = null;
-            MaxShindoRankSurvived = 0;
         }
     }
 }
