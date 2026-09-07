@@ -126,15 +126,6 @@ namespace EarthquakeGame
             }
         }
 
-        // Fortune-forecast and earthquake-alert overlays are drawn as
-        // full-screen panels created after this one, so without this the
-        // map would render underneath them and never be visible while an
-        // overlay is showing.
-        public void BringToFront()
-        {
-            transform.SetAsLastSibling();
-        }
-
         public void ClearAll()
         {
             foreach (var kv in prefecturePolygons)
@@ -176,9 +167,11 @@ namespace EarthquakeGame
             var text = obj.AddComponent<Text>();
             text.text = "×";
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            text.fontSize = 20;
+            text.fontSize = 24;
             text.fontStyle = FontStyle.Bold;
-            text.color = new Color(0.9f, 0.05f, 0.75f);
+            // Bright warm marker so the player's own position stays readable
+            // over both the dark sea and any intensity color.
+            text.color = new Color(1f, 0.92f, 0.35f);
             text.alignment = TextAnchor.MiddleCenter;
 
             playerMarker = rt;

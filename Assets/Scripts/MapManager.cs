@@ -16,7 +16,11 @@ namespace EarthquakeGame
         [Tooltip("Parent transform (e.g. a Grid Layout Group) that buttons are instantiated under.")]
         public Transform buttonContainer;
 
-        public Color reachableColor = new Color(0.6f, 1f, 0.6f); // light green
+        [Tooltip("Whole panel (frame + header) to show/hide with the list. Falls back to buttonContainer when unset.")]
+        public GameObject panelRoot;
+
+        // Deep green, so the button's white label stays readable on it.
+        public Color reachableColor = new Color(0.18f, 0.49f, 0.32f);
 
         private GameManager gameManager;
 
@@ -36,7 +40,8 @@ namespace EarthquakeGame
 
             // Only shown once movement actually becomes available, instead
             // of always displaying a list of not-yet-reachable prefectures.
-            buttonContainer.gameObject.SetActive(canMove);
+            GameObject toggled = panelRoot != null ? panelRoot : buttonContainer.gameObject;
+            toggled.SetActive(canMove);
             if (!canMove) return;
 
             foreach (var neighbor in neighbors)

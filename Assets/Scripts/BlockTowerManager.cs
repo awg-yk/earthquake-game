@@ -16,7 +16,8 @@ namespace EarthquakeGame
 
         [Header("Base platform")]
         public Rigidbody2D baseRigidbody;
-        public float baseHalfWidth = 4f;
+        [Tooltip("Half the pedestal's width. Deliberately narrow (a few blocks wide) so a sloppy placement really does tip off the edge - on a wide slab nothing ever falls and the duel never resolves.")]
+        public float baseHalfWidth = 1.8f;
 
         [Header("Block settings")]
         public float blockSize = 0.6f;
@@ -106,19 +107,44 @@ namespace EarthquakeGame
             return new Vector2(blockSize * elongation, blockSize / elongation);
         }
 
-        public static readonly Color PlayerBlockColor = new Color(0.85f, 0.25f, 0.25f);
-        public static readonly Color NpcBlockColor = new Color(0.25f, 0.45f, 0.85f);
+        public static readonly Color PlayerBlockColor = new Color(0.89f, 0.29f, 0.25f);
+        public static readonly Color NpcBlockColor = new Color(0.26f, 0.50f, 0.88f);
 
-        public Block PlaceBlock(Vector2 size, float xPosition, float rotationDegrees, Color color)
+        // X the tower currently stacks around - the center of its topmost
+        // block, so an opponent aiming "at the tower" aims at what is
+        // actually there rather than at the middle of the base.
+        public float GetTowerTopCenterX()
+        {
+            float highest = float.NegativeInfinity;
+            float centerX = 0f;
+
+            foreach (var block in aliveBlocks)
+            {
+                if (block == null) continue;
+                var collider = block.GetComponent<Collider2D>();
+                float top = collider != null ? collider.bounds.max.y : block.transform.position.y;
+                if (top > highest)
+                {
+                    highest = top;
+                    centerX = collider != null ? collider.bounds.center.x : block.transform.position.x;
+                }
+            }
+
+            return float.IsNegativeInfinity(highest) ? 0f : centerX;
+        }
+
+        // dropHeight overrides spawnHeightMargin for this one block: dropping
+        // from lower is a gentler, more skillful placement.
+        public Block PlaceBlock(Vector2 size, float xPosition, float rotationDegrees, Color color, float dropHeight = -1f)
         {
             xPosition = ClampX(xPosition);
-            float spawnY = GetCurrentTowerTopY() + spawnHeightMargin;
+            float spawnY = GetCurrentTowerTopY() + (dropHeight < 0f ? spawnHeightMargin : dropHeight);
 
             GameObject obj = new GameObject("Block_Rectangle");
             obj.transform.position = new Vector3(xPosition, spawnY, 0);
             obj.transform.rotation = Quaternion.Euler(0, 0, rotationDegrees);
 
-            ShapeMeshFactory.Apply(obj, size, color);
+            ShapeMeshFactory.ApplyBlock(obj, size, color);
 
             var collider = obj.GetComponent<Collider2D>();
             if (collider != null) collider.sharedMaterial = HighFrictionMaterial;

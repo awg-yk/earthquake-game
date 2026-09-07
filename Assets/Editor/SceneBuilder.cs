@@ -1,3 +1,4 @@
+using System.IO;
 using UnityEditor;
 using UnityEditor.Events;
 using UnityEditor.SceneManagement;
@@ -8,11 +9,39 @@ using UnityEngine.UI;
 using EarthquakeGame;
 
 // Editor-only tool that builds MainScene entirely from code, so the whole
-// hierarchy (Canvas, texts, buttons, managers, wiring, block tower) is
+// hierarchy (Canvas, panels, buttons, managers, wiring, block tower) is
 // generated consistently instead of by hand-clicking through the Editor UI.
 // Run via the menu: Earthquake Game > Build Main Scene
+//
+// The UI follows one small design system rather than raw default widgets:
+// dark rounded cards with a soft drop shadow, an accent rule under every
+// card title, a muted-label / bright-value type hierarchy, and one shared
+// palette also used by the blocks themselves.
 public static class SceneBuilder
 {
+    // ---- Design tokens ----------------------------------------------------
+    private static readonly Color CardBg = new Color(0.086f, 0.114f, 0.161f, 0.94f);
+    private static readonly Color CardBgSolid = new Color(0.086f, 0.114f, 0.161f, 1f);
+    private static readonly Color CardShadow = new Color(0f, 0f, 0f, 0.35f);
+    private static readonly Color TextPrimary = new Color(0.94f, 0.96f, 0.98f);
+    private static readonly Color TextMuted = new Color(0.58f, 0.65f, 0.74f);
+    private static readonly Color AccentCyan = new Color(0.31f, 0.76f, 0.97f);
+    private static readonly Color AccentAmber = new Color(1f, 0.72f, 0.30f);
+    private static readonly Color AccentGreen = new Color(0.35f, 0.77f, 0.45f);
+    private static readonly Color AlertRed = new Color(0.72f, 0.17f, 0.16f, 0.96f);
+    private static readonly Color ButtonNeutral = new Color(0.20f, 0.24f, 0.31f);
+    private static readonly Color ButtonPrimary = new Color(0.20f, 0.62f, 0.86f);
+    private static readonly Color ButtonGreen = new Color(0.18f, 0.49f, 0.32f);
+
+    private static Color PlayerColor => BlockTowerManager.PlayerBlockColor;
+    private static Color NpcColor => BlockTowerManager.NpcBlockColor;
+
+    private const float FontSizeMultiplier = 1.35f;
+
+    // Narrow pedestal: a badly placed block has to actually tip off it, which
+    // is what makes the duel resolve and the difficulty levels matter.
+    private const float BaseHalfWidth = 1.8f;
+
     [MenuItem("Earthquake Game/Build Main Scene")]
     public static void BuildMainScene()
     {
@@ -25,6 +54,8 @@ public static class SceneBuilder
         }
 
         Camera mainCamera = CreateCamera();
+        CreateSkyBackdrop(mainCamera);
+        CreateGround();
         var (earthquakeSoundPlayer, fortuneChimePlayer, bgmPlayer) = CreateAudioPlayers();
         CreateLight();
         Rigidbody2D basePlatform = CreateBasePlatform();
@@ -34,54 +65,65 @@ public static class SceneBuilder
 
         Vector2 topLeft = new Vector2(0f, 1f);
         Vector2 topCenter = new Vector2(0.5f, 1f);
-        Text dateText = CreateTextAnchored(canvas.transform, "DateText", topCenter, topCenter, 0, -20, 380, 40, 22, "日付：2000年1月1日");
-        dateText.alignment = TextAnchor.UpperCenter;
-        Text survivalDaysText = CreateTextAnchored(canvas.transform, "SurvivalDaysText", topCenter, topCenter, 0, -55, 380, 40, 22, "経過日数：0日目");
-        survivalDaysText.alignment = TextAnchor.UpperCenter;
-        Text currentPrefectureText = CreateTextAnchored(canvas.transform, "CurrentPrefectureText", topCenter, topCenter, 0, -90, 380, 40, 22, "現在地：東京都");
-        currentPrefectureText.alignment = TextAnchor.UpperCenter;
-        Text turnText = CreateTextAnchored(canvas.transform, "TurnText", topCenter, topCenter, 0, -125, 380, 34, 22, "あなたの番です");
-        turnText.alignment = TextAnchor.UpperCenter;
-        turnText.fontStyle = FontStyle.Bold;
-        turnText.color = new Color(0.1f, 0.4f, 0.85f);
-        Text latestEarthquakeText = CreateTextAnchored(canvas.transform, "LatestEarthquakeText", topCenter, topCenter, 0, -165, 380, 140, 18, "最新の地震：なし");
-        latestEarthquakeText.alignment = TextAnchor.UpperCenter;
+        Vector2 topRight = new Vector2(1f, 1f);
+        Vector2 bottomLeft = new Vector2(0f, 0f);
+        Vector2 bottomCenter = new Vector2(0.5f, 0f);
+        Vector2 bottomRight = new Vector2(1f, 0f);
 
-        // Persistent top-left map showing this month's forecasted warning
-        // areas (震度2以上), unlike the top-right one which only flashes
-        // briefly for today's earthquake alerts.
-        IntensityMapView forecastMapView = CreateIntensityMapPanel(canvas.transform, "ForecastMapPanel", topLeft, topLeft, 20, -20, "今月の警戒マップ");
+        // --- Top center: date / day / location, plus the turn badge -------
+        RectTransform infoCard = CreateCard(canvas.transform, "InfoCard", topCenter, topCenter, 0, -18, 440, 122);
+        Text dateText = CreateLabel(infoCard, "DateText", topCenter, topCenter, 0, -14, 400, 26, 15, "2000年1月1日", TextMuted, TextAnchor.UpperCenter);
+        Text survivalDaysText = CreateLabel(infoCard, "SurvivalDaysText", topCenter, topCenter, 0, -40, 400, 26, 15, "0日目", TextMuted, TextAnchor.UpperCenter);
+        Text currentPrefectureText = CreateLabel(infoCard, "CurrentPrefectureText", topCenter, topCenter, 0, -66, 400, 44, 26, "東京都", TextPrimary, TextAnchor.UpperCenter);
+        currentPrefectureText.fontStyle = FontStyle.Bold;
 
-        GameObject buttonContainer = CreateButtonContainer(canvas.transform);
+        Image turnBadge = CreateBadge(canvas.transform, "TurnBadge", topCenter, topCenter, 0, -152, 240, 46, PlayerColor, out Text turnText);
+        turnText.text = "あなたの番";
+
+        // --- Top left: this month's forecast map + difficulty badge -------
+        IntensityMapView forecastMapView = CreateIntensityMapPanel(canvas.transform, "ForecastMapPanel", topLeft, topLeft, 20, -18, "今月の警戒マップ", AccentAmber);
+        RectTransform difficultyCard = CreateCard(canvas.transform, "DifficultyCard", topLeft, topLeft, 20, -282, 300, 44);
+        Text difficultyBadgeText = CreateLabel(difficultyCard, "DifficultyBadgeText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 0, 280, 30, 16, "難易度　EASY", AccentCyan, TextAnchor.MiddleCenter);
+        difficultyBadgeText.fontStyle = FontStyle.Bold;
+
+        // --- Top right: today's quake map, latest quake, movement list ----
+        IntensityMapView intensityMapView = CreateIntensityMapPanel(canvas.transform, "IntensityMapPanel", topRight, topRight, -20, -18, "今日の震度マップ", AccentCyan);
+
+        RectTransform latestCard = CreateCard(canvas.transform, "LatestQuakeCard", topRight, topRight, -20, -282, 300, 104);
+        CreateCardHeader(latestCard, "最新の地震", AccentCyan);
+        Text latestEarthquakeText = CreateLabel(latestCard, "LatestEarthquakeText", topLeft, topLeft, 16, -42, 268, 56, 14, "まだ地震は起きていません", TextPrimary, TextAnchor.UpperLeft);
+
+        RectTransform moveCard = CreateCard(canvas.transform, "MoveCard", topRight, topRight, -20, -398, 300, 286, out GameObject moveCardRoot);
+        CreateCardHeader(moveCard, "移動できる地域", AccentGreen);
+        GameObject buttonContainer = CreateButtonContainer(moveCard);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
 
-        // --- Block placement: shape is random, player only rotates + aims ---
-        // The rotate buttons live in the bottom-right corner; only a short
-        // "回転（Q/E）" hint is shown (not the old full instructions).
-        Vector2 bottomRight = new Vector2(1f, 0f);
-        Button rotateLeftButton = CreateButtonAnchored(canvas.transform, "RotateLeftButton", bottomRight, bottomRight, -190, 70, 90, 50, "⟲");
-        Button rotateRightButton = CreateButtonAnchored(canvas.transform, "RotateRightButton", bottomRight, bottomRight, -90, 70, 90, 50, "⟳");
-        Text placementHintText = CreateTextAnchored(canvas.transform, "PlacementHintText", bottomRight, bottomRight, -190, 20, 180, 30, 16, "回転（Q/E）");
-        placementHintText.alignment = TextAnchor.MiddleCenter;
+        // --- Bottom right: rotation controls ------------------------------
+        RectTransform controlsCard = CreateCard(canvas.transform, "ControlsCard", bottomRight, bottomRight, -20, 20, 300, 112);
+        Button rotateLeftButton = CreateStyledButton(controlsCard, "RotateLeftButton", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), -58, -14, 104, 46, "⟲", ButtonNeutral, 22);
+        Button rotateRightButton = CreateStyledButton(controlsCard, "RotateRightButton", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 58, -14, 104, 46, "⟳", ButtonNeutral, 22);
+        CreateLabel(controlsCard, "PlacementHintText", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), 0, 12, 268, 26, 13, "ブロックを回転（Q / E）", TextMuted, TextAnchor.LowerCenter);
+
+        // --- Bottom left: controls cheat sheet ----------------------------
+        RectTransform hintCard = CreateCard(canvas.transform, "HintCard", bottomLeft, bottomLeft, 20, 20, 300, 112);
+        CreateCardHeader(hintCard, "操作", AccentCyan);
+        CreateLabel(hintCard, "HintText", topLeft, topLeft, 16, -42, 268, 64, 13,
+            "クリック　：ブロックを落とす\nQ / E　　：回転\n↑↓ / ホイール：カメラ移動・ズーム", TextMuted, TextAnchor.UpperLeft);
+
+        // --- Bottom center: earthquake alert banner (hidden by default) ---
+        GameObject earthquakeAlertPanel = CreateAlertBanner(canvas.transform, bottomCenter, out Text earthquakeAlertText);
+
+        // --- World-space helpers ------------------------------------------
         Transform dropIndicator = CreateDropIndicator();
         GameObject shapePreview = new GameObject("ShapePreview");
         shapePreview.transform.position = new Vector3(0, 7f, -0.5f);
 
-        GameObject roundEndPanel = CreateRoundEndPanel(canvas.transform, out Text roundEndScoreText, out Button restartButton);
-
-        Text earthquakeAlertText = CreateText(canvas.transform, "EarthquakeAlertText", 0, 320, 600, 60, 32, "地震発生！");
-        earthquakeAlertText.alignment = TextAnchor.MiddleCenter;
-        earthquakeAlertText.color = new Color(0.85f, 0.1f, 0.1f);
-        earthquakeAlertText.fontStyle = FontStyle.Bold;
-        earthquakeAlertText.gameObject.SetActive(false);
-
-        IntensityMapView intensityMapView = CreateIntensityMapPanel(canvas.transform);
-
+        // --- Overlays ------------------------------------------------------
+        GameObject roundEndPanel = CreateRoundEndPanel(canvas.transform, out Text roundEndTitleText, out Text roundEndScoreText, out Button restartButton);
         GameObject fortuneAnimationPanel = CreateFortuneAnimationPanel(canvas.transform, out Text fortuneAnimationText, out Transform fortuneAnimationIcon);
-
         GameObject titleScreenPanel = CreateTitleScreenPanel(canvas.transform, out Button startButton, out Button easyButton, out Button normalButton, out Button hardButton, out Text difficultyText);
 
-        // --- Managers ---
+        // --- Managers ------------------------------------------------------
         GameObject gameManagerObj = new GameObject("GameManager");
         GameObject playerManagerObj = new GameObject("PlayerManager");
         GameObject earthquakeManagerObj = new GameObject("EarthquakeManager");
@@ -98,7 +140,7 @@ public static class SceneBuilder
         var blockTowerManager = blockTowerManagerObj.AddComponent<BlockTowerManager>();
 
         blockTowerManager.baseRigidbody = basePlatform;
-        blockTowerManager.baseHalfWidth = 4f;
+        blockTowerManager.baseHalfWidth = BaseHalfWidth;
 
         gameManager.playerManager = playerManager;
         gameManager.earthquakeManager = earthquakeManager;
@@ -110,7 +152,14 @@ public static class SceneBuilder
         gameManager.currentPrefectureText = currentPrefectureText;
         gameManager.latestEarthquakeText = latestEarthquakeText;
         gameManager.turnText = turnText;
+        gameManager.turnBadge = turnBadge;
+        gameManager.difficultyText = difficultyText;
+        gameManager.difficultyBadgeText = difficultyBadgeText;
+        gameManager.easyButton = easyButton;
+        gameManager.normalButton = normalButton;
+        gameManager.hardButton = hardButton;
         gameManager.roundEndPanel = roundEndPanel;
+        gameManager.roundEndTitleText = roundEndTitleText;
         gameManager.roundEndScoreText = roundEndScoreText;
         gameManager.dropIndicator = dropIndicator;
         gameManager.shapePreview = shapePreview;
@@ -118,17 +167,18 @@ public static class SceneBuilder
         gameManager.earthquakeSoundPlayer = earthquakeSoundPlayer;
         gameManager.fortuneChimePlayer = fortuneChimePlayer;
         gameManager.bgmPlayer = bgmPlayer;
+        gameManager.earthquakeAlertPanel = earthquakeAlertPanel;
         gameManager.earthquakeAlertText = earthquakeAlertText;
         gameManager.intensityMapView = intensityMapView;
         gameManager.forecastMapView = forecastMapView;
         gameManager.titleScreenPanel = titleScreenPanel;
-        gameManager.difficultyText = difficultyText;
         gameManager.fortuneAnimationPanel = fortuneAnimationPanel;
         gameManager.fortuneAnimationText = fortuneAnimationText;
         gameManager.fortuneAnimationIcon = fortuneAnimationIcon;
 
         mapManager.prefectureButtonPrefab = prefectureButtonTemplate;
         mapManager.buttonContainer = buttonContainer.transform;
+        mapManager.panelRoot = moveCardRoot;
 
         fortuneTeller.earthquakeManager = earthquakeManager;
 
@@ -141,6 +191,7 @@ public static class SceneBuilder
         UnityEventTools.AddVoidPersistentListener(hardButton.onClick, gameManager.SetDifficultyHard);
 
         roundEndPanel.SetActive(false);
+        earthquakeAlertPanel.SetActive(false);
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
@@ -148,27 +199,171 @@ public static class SceneBuilder
         Debug.Log("SceneBuilder: MainScene built and saved successfully.");
     }
 
+    // =====================================================================
+    // World
+    // =====================================================================
+
     private static Camera CreateCamera()
     {
         GameObject camObj = new GameObject("Main Camera");
         camObj.tag = "MainCamera";
         Camera cam = camObj.AddComponent<Camera>();
         cam.orthographic = true;
-        cam.orthographicSize = 6f;
-        cam.transform.position = new Vector3(0, 3, -10);
+        cam.orthographicSize = 4f;
+        cam.transform.position = new Vector3(0, 2.2f, -10);
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.75f, 0.85f, 0.95f);
+        cam.backgroundColor = new Color(0.18f, 0.36f, 0.58f);
         camObj.AddComponent<AudioListener>();
         camObj.AddComponent<CameraShaker>();
         return cam;
     }
 
-    // Each audio player gets its own GameObject/AudioSource. Putting them
-    // all on one object made every script's Awake() find and reuse the
-    // SAME AudioSource (GetComponent finds whichever was added first),
-    // which caused the BGM to get stepped on by one-shot sounds.
+    // A vertical sky gradient parented to the camera, rescaled every frame
+    // by CameraBackdrop so it always fills the view no matter how far the
+    // camera has zoomed out to follow the tower.
+    private static void CreateSkyBackdrop(Camera cam)
+    {
+        Sprite sky = CreateOrLoadSkySprite();
+        if (sky == null) return;
+
+        GameObject obj = new GameObject("SkyBackdrop");
+        obj.transform.SetParent(cam.transform, false);
+        obj.transform.localPosition = new Vector3(0f, 0f, 20f);
+
+        var renderer = obj.AddComponent<SpriteRenderer>();
+        renderer.sprite = sky;
+        renderer.sortingOrder = -200;
+
+        var backdrop = obj.AddComponent<CameraBackdrop>();
+        backdrop.backdrop = renderer;
+    }
+
+    // Generates (once) a small vertical gradient PNG asset. It has to be a
+    // real asset rather than a runtime Texture2D, otherwise the sprite
+    // reference would not survive saving the scene.
+    private static Sprite CreateOrLoadSkySprite()
+    {
+        const string folder = "Assets/Generated";
+        const string path = folder + "/sky_gradient.png";
+
+        if (!AssetDatabase.IsValidFolder(folder))
+        {
+            AssetDatabase.CreateFolder("Assets", "Generated");
+        }
+
+        var texture = new Texture2D(4, 256, TextureFormat.RGBA32, false);
+        Color horizonWarm = new Color(0.96f, 0.86f, 0.74f);
+        Color horizonBlue = new Color(0.76f, 0.87f, 0.94f);
+        Color zenith = new Color(0.16f, 0.33f, 0.56f);
+
+        for (int y = 0; y < texture.height; y++)
+        {
+            float t = y / (float)(texture.height - 1);
+            Color c = t < 0.16f
+                ? Color.Lerp(horizonWarm, horizonBlue, t / 0.16f)
+                : Color.Lerp(horizonBlue, zenith, Mathf.Pow((t - 0.16f) / 0.84f, 0.85f));
+            for (int x = 0; x < texture.width; x++) texture.SetPixel(x, y, c);
+        }
+        texture.Apply();
+
+        File.WriteAllBytes(path, texture.EncodeToPNG());
+        Object.DestroyImmediate(texture);
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+
+        if (AssetImporter.GetAtPath(path) is TextureImporter importer)
+        {
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            importer.filterMode = FilterMode.Bilinear;
+            importer.mipmapEnabled = false;
+            importer.SaveAndReimport();
+        }
+
+        return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+    }
+
+    // Soil + a grass edge right under the platform, so the tower reads as
+    // standing on ground instead of floating in empty color.
+    private static void CreateGround()
+    {
+        GameObject soil = new GameObject("Ground");
+        soil.transform.position = new Vector3(0f, -30.15f, 1f);
+        ShapeMeshFactory.Apply(soil, new Vector2(400f, 60f), new Color(0.13f, 0.16f, 0.14f), addCollider: false);
+        soil.GetComponent<MeshRenderer>().sortingOrder = -120;
+
+        GameObject grass = new GameObject("GroundEdge");
+        grass.transform.position = new Vector3(0f, -0.30f, 0.9f);
+        ShapeMeshFactory.Apply(grass, new Vector2(400f, 0.3f), new Color(0.27f, 0.44f, 0.30f), addCollider: false);
+        grass.GetComponent<MeshRenderer>().sortingOrder = -110;
+    }
+
+    // A wide, thin, kinematic platform that the block tower is built on.
+    // BlockTowerManager moves it side-to-side to simulate an earthquake.
+    private static Rigidbody2D CreateBasePlatform()
+    {
+        GameObject obj = new GameObject("BasePlatform");
+        obj.transform.position = new Vector3(0, 0, 0);
+        ShapeMeshFactory.Apply(obj, new Vector2(1f, 1f), new Color(0.19f, 0.23f, 0.29f));
+        // Height stays 0.3 so the top surface lands exactly where
+        // BlockTowerManager.GetBaseTopY() expects it (+0.15).
+        obj.transform.localScale = new Vector3(BaseHalfWidth * 2f, 0.3f, 1f);
+
+        // A lighter cap along the top edge reads as a lit surface. It is a
+        // child so it rides along with the platform while it shakes; its
+        // local scale is chosen to cancel out the parent's non-uniform one.
+        GameObject cap = new GameObject("Cap");
+        cap.transform.SetParent(obj.transform, false);
+        cap.transform.localPosition = new Vector3(0f, 0.38f, -0.01f);
+        cap.transform.localScale = new Vector3(1f, 0.22f, 1f);
+        ShapeMeshFactory.Apply(cap, Vector2.one, new Color(0.31f, 0.37f, 0.45f), addCollider: false);
+
+        // Re-fit the collider to the platform's actual scaled size instead
+        // of the generic 1x1 square used by ShapeMeshFactory.
+        Object.DestroyImmediate(obj.GetComponent<BoxCollider2D>());
+        var box = obj.AddComponent<BoxCollider2D>();
+        box.size = Vector2.one;
+        box.sharedMaterial = BlockTowerManager.HighFrictionMaterial;
+
+        var rb = obj.AddComponent<Rigidbody2D>();
+        rb.bodyType = RigidbodyType2D.Kinematic;
+        return rb;
+    }
+
+    // A downward-pointing arrow floating above the tower, showing exactly
+    // where the next block will drop. No collider/rigidbody - it is pure
+    // visual guidance and must never interact with the physics blocks.
+    private static Transform CreateDropIndicator()
+    {
+        GameObject obj = new GameObject("DropIndicator");
+        var meshFilter = obj.AddComponent<MeshFilter>();
+        var meshRenderer = obj.AddComponent<MeshRenderer>();
+        meshRenderer.sharedMaterial = new Material(Shader.Find("Sprites/Default"));
+        meshRenderer.sharedMaterial.color = PlayerColor;
+
+        float w = 0.32f;
+        float h = 0.42f;
+        var mesh = new Mesh();
+        mesh.vertices = new[]
+        {
+            new Vector3(-w, h, 0), new Vector3(w, h, 0), new Vector3(0, 0, 0),
+            new Vector3(-w * 0.32f, h, 0), new Vector3(w * 0.32f, h, 0),
+            new Vector3(w * 0.32f, h * 1.9f, 0), new Vector3(-w * 0.32f, h * 1.9f, 0)
+        };
+        mesh.triangles = new[] { 0, 1, 2, 3, 5, 4, 3, 6, 5 };
+        mesh.RecalculateNormals();
+        meshFilter.mesh = mesh;
+
+        obj.transform.position = new Vector3(0, 7f, -0.5f);
+        return obj.transform;
+    }
+
     private static (EarthquakeSoundPlayer, FortuneChimePlayer, BGMPlayer) CreateAudioPlayers()
     {
+        // Each audio player gets its own GameObject/AudioSource. Putting them
+        // all on one object made every script's Awake() find and reuse the
+        // SAME AudioSource (GetComponent finds whichever was added first),
+        // which caused the BGM to get stepped on by one-shot sounds.
         GameObject earthquakeSoundObj = new GameObject("EarthquakeSoundPlayer");
         var earthquakeSoundPlayer = earthquakeSoundObj.AddComponent<EarthquakeSoundPlayer>();
 
@@ -189,26 +384,9 @@ public static class SceneBuilder
         lightObj.transform.rotation = Quaternion.Euler(50, -30, 0);
     }
 
-    // A wide, thin, kinematic platform that the block tower is built on.
-    // BlockTowerManager moves it side-to-side to simulate an earthquake.
-    private static Rigidbody2D CreateBasePlatform()
-    {
-        GameObject obj = new GameObject("BasePlatform");
-        obj.transform.position = new Vector3(0, 0, 0);
-        ShapeMeshFactory.Apply(obj, new Vector2(1f, 1f), new Color(0.5f, 0.4f, 0.3f));
-        obj.transform.localScale = new Vector3(8f, 0.3f, 1f);
-
-        // Re-fit the collider to the platform's actual scaled size instead
-        // of the generic 1x1 square used by ShapeMeshFactory.
-        Object.DestroyImmediate(obj.GetComponent<BoxCollider2D>());
-        var box = obj.AddComponent<BoxCollider2D>();
-        box.size = Vector2.one;
-        box.sharedMaterial = BlockTowerManager.HighFrictionMaterial;
-
-        var rb = obj.AddComponent<Rigidbody2D>();
-        rb.bodyType = RigidbodyType2D.Kinematic;
-        return rb;
-    }
+    // =====================================================================
+    // UI foundations
+    // =====================================================================
 
     private static Canvas CreateCanvas()
     {
@@ -241,6 +419,18 @@ public static class SceneBuilder
         return font;
     }
 
+    // Unity's built-in rounded box, used sliced, gives every card and button
+    // soft corners without shipping any art of our own.
+    private static Sprite RoundedSprite()
+    {
+        return AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+    }
+
+    private static Sprite CircleSprite()
+    {
+        return AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+    }
+
     private static RectTransform SetupRect(GameObject obj, Transform parent, float x, float y, float w, float h)
     {
         return SetupRectAnchored(obj, parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), x, y, w, h);
@@ -249,9 +439,7 @@ public static class SceneBuilder
     // Anchors the RectTransform at a specific point of its parent (e.g.
     // (0,1) = top-left, (1,1) = top-right) instead of always the center.
     // This keeps HUD elements fully on-screen even when the actual game
-    // window aspect ratio doesn't match the 1280x720 reference resolution -
-    // a center-anchored element far from center can otherwise be pushed
-    // past the visible edge.
+    // window aspect ratio doesn't match the 1280x720 reference resolution.
     private static RectTransform SetupRectAnchored(GameObject obj, Transform parent, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h)
     {
         RectTransform rt = obj.GetComponent<RectTransform>();
@@ -265,157 +453,291 @@ public static class SceneBuilder
         return rt;
     }
 
-    private static Text CreateText(Transform parent, string name, float x, float y, float w, float h, int fontSize, string content)
+    private static RectTransform Stretch(GameObject obj, Transform parent, Vector2 offset)
     {
-        return CreateTextAnchored(parent, name, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), x, y, w, h, fontSize, content);
+        RectTransform rt = obj.GetComponent<RectTransform>();
+        if (rt == null) rt = obj.AddComponent<RectTransform>();
+        rt.SetParent(parent, false);
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = offset;
+        rt.offsetMax = offset;
+        return rt;
     }
 
-    // Legacy Text at small point sizes reads as crushed/blurry once the
-    // canvas is scaled to non-reference resolutions. Bump every requested
-    // size up uniformly rather than hand-tuning each call site.
-    private const float FontSizeMultiplier = 1.35f;
+    private static RectTransform CreateCard(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h)
+    {
+        return CreateCard(parent, name, anchor, pivot, x, y, w, h, CardBg, out _);
+    }
 
-    private static Text CreateTextAnchored(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h, int fontSize, string content)
+    private static RectTransform CreateCard(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h, out GameObject root)
+    {
+        return CreateCard(parent, name, anchor, pivot, x, y, w, h, CardBg, out root);
+    }
+
+    // A card = drop shadow + rounded body. Children are added to the body,
+    // while `root` is what callers show/hide so the shadow travels with it.
+    private static RectTransform CreateCard(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h, Color color, out GameObject root)
+    {
+        root = new GameObject(name);
+        RectTransform group = SetupRectAnchored(root, parent, anchor, pivot, x, y, w, h);
+
+        GameObject shadowObj = new GameObject("Shadow");
+        Stretch(shadowObj, group, new Vector2(3f, -5f));
+        Image shadow = shadowObj.AddComponent<Image>();
+        shadow.sprite = RoundedSprite();
+        shadow.type = Image.Type.Sliced;
+        shadow.color = CardShadow;
+        shadow.raycastTarget = false;
+
+        GameObject bodyObj = new GameObject("Body");
+        RectTransform body = Stretch(bodyObj, group, Vector2.zero);
+        Image image = bodyObj.AddComponent<Image>();
+        image.sprite = RoundedSprite();
+        image.type = Image.Type.Sliced;
+        image.color = color;
+
+        return body;
+    }
+
+    // Card title: a short accent rule with the title above it, so every
+    // panel is labelled the same way.
+    private static Text CreateCardHeader(RectTransform body, string title, Color accent)
+    {
+        Text label = CreateLabel(body, "Header", new Vector2(0f, 1f), new Vector2(0f, 1f), 16, -10, 240, 24, 14, title, TextPrimary, TextAnchor.UpperLeft);
+        label.fontStyle = FontStyle.Bold;
+
+        GameObject rule = new GameObject("HeaderRule");
+        SetupRectAnchored(rule, body, new Vector2(0f, 1f), new Vector2(0f, 1f), 16, -32, 34, 3);
+        Image ruleImage = rule.AddComponent<Image>();
+        ruleImage.color = accent;
+        ruleImage.raycastTarget = false;
+
+        return label;
+    }
+
+    // A colored pill with centered text - used for the turn indicator.
+    private static Image CreateBadge(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h, Color color, out Text label)
+    {
+        GameObject obj = new GameObject(name);
+        SetupRectAnchored(obj, parent, anchor, pivot, x, y, w, h);
+        Image image = obj.AddComponent<Image>();
+        image.sprite = RoundedSprite();
+        image.type = Image.Type.Sliced;
+        image.color = color;
+
+        label = CreateLabel(obj.transform, "Label", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 0, w - 16, h - 10, 18, "", Color.white, TextAnchor.MiddleCenter);
+        label.fontStyle = FontStyle.Bold;
+        return image;
+    }
+
+    private static Text CreateLabel(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h, int fontSize, string content, Color color, TextAnchor alignment)
     {
         GameObject obj = new GameObject(name);
         SetupRectAnchored(obj, parent, anchor, pivot, x, y, w, h);
         Text text = obj.AddComponent<Text>();
         text.font = GetDefaultFont();
+        // Legacy Text at small point sizes reads as crushed once the canvas
+        // is scaled, so every requested size is bumped up uniformly.
         text.fontSize = Mathf.RoundToInt(fontSize * FontSizeMultiplier);
         text.text = content;
-        text.color = Color.black;
-        text.alignment = TextAnchor.UpperLeft;
+        text.color = color;
+        text.alignment = alignment;
+        text.lineSpacing = 1.15f;
         text.horizontalOverflow = HorizontalWrapMode.Wrap;
         text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.raycastTarget = false;
         return text;
     }
 
-    private static Button CreateButton(Transform parent, string name, float x, float y, float w, float h, string label)
-    {
-        return CreateButtonAnchored(parent, name, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), x, y, w, h, label);
-    }
-
-    private static Button CreateButtonAnchored(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h, string label)
+    private static Button CreateStyledButton(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, float w, float h, string label, Color baseColor, int fontSize = 18)
     {
         GameObject obj = new GameObject(name);
         SetupRectAnchored(obj, parent, anchor, pivot, x, y, w, h);
+
         Image image = obj.AddComponent<Image>();
+        image.sprite = RoundedSprite();
+        image.type = Image.Type.Sliced;
         image.color = Color.white;
+
         Button button = obj.AddComponent<Button>();
         button.targetGraphic = image;
 
-        Text text = CreateText(obj.transform, "Text (Legacy)", 0, 0, w, h, 22, label);
-        text.alignment = TextAnchor.MiddleCenter;
-        text.color = Color.black;
+        ColorBlock colors = button.colors;
+        colors.normalColor = baseColor;
+        colors.highlightedColor = baseColor * 1.25f;
+        colors.pressedColor = baseColor * 0.8f;
+        colors.selectedColor = baseColor;
+        colors.fadeDuration = 0.08f;
+        button.colors = colors;
+
+        Text text = CreateLabel(obj.transform, "Text (Legacy)", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 0, w - 12, h - 8, fontSize, label, Color.white, TextAnchor.MiddleCenter);
+        text.fontStyle = FontStyle.Bold;
 
         return button;
     }
 
-    // A full-screen title panel shown on top of everything at launch. The
-    // game underneath is already initialized (Start() runs StartNewGame()
-    // as usual); this panel just blocks input until the player presses
-    // start, then hides itself.
+    // =====================================================================
+    // Panels
+    // =====================================================================
+
+    private static GameObject CreateAlertBanner(Transform parent, Vector2 bottomCenter, out Text alertText)
+    {
+        RectTransform body = CreateCard(parent, "EarthquakeAlertPanel", bottomCenter, bottomCenter, 0, 26, 620, 88, AlertRed, out GameObject root);
+
+        GameObject iconObj = new GameObject("AlertIcon");
+        SetupRectAnchored(iconObj, body, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), 18, 0, 46, 46);
+        Image icon = iconObj.AddComponent<Image>();
+        icon.sprite = CircleSprite();
+        icon.color = new Color(1f, 0.85f, 0.4f);
+        CreateLabel(iconObj.transform, "Glyph", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 0, 46, 46, 22, "!", new Color(0.4f, 0.12f, 0.05f), TextAnchor.MiddleCenter).fontStyle = FontStyle.Bold;
+
+        CreateLabel(body, "AlertTitle", new Vector2(0f, 1f), new Vector2(0f, 1f), 76, -12, 480, 22, 13, "地震速報", new Color(1f, 0.82f, 0.78f), TextAnchor.UpperLeft).fontStyle = FontStyle.Bold;
+        alertText = CreateLabel(body, "EarthquakeAlertText", new Vector2(0f, 1f), new Vector2(0f, 1f), 76, -36, 524, 46, 14, "地震発生", Color.white, TextAnchor.UpperLeft);
+
+        return root;
+    }
+
     private static GameObject CreateTitleScreenPanel(Transform parent, out Button startButton, out Button easyButton, out Button normalButton, out Button hardButton, out Text difficultyText)
     {
         GameObject panel = new GameObject("TitleScreenPanel");
         SetupRect(panel, parent, 0, 0, 1280, 720);
         Image panelImage = panel.AddComponent<Image>();
-        panelImage.color = new Color(0.08f, 0.1f, 0.16f, 0.97f);
+        panelImage.color = new Color(0.055f, 0.078f, 0.118f, 0.98f);
 
-        Text titleText = CreateText(panel.transform, "TitleText", 0, 100, 900, 140, 48, "日本地震サバイバル\n積み木タワー");
-        titleText.alignment = TextAnchor.MiddleCenter;
-        titleText.color = Color.white;
+        // Two thin accent rules in the player/NPC colors frame the title.
+        GameObject topRule = new GameObject("TopRule");
+        SetupRectAnchored(topRule, panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 168, 420, 4);
+        topRule.AddComponent<Image>().color = PlayerColor;
+
+        GameObject bottomRule = new GameObject("BottomRule");
+        SetupRectAnchored(bottomRule, panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 40, 420, 4);
+        bottomRule.AddComponent<Image>().color = NpcColor;
+
+        CreateLabel(panel.transform, "Kicker", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 200, 900, 30, 16, "実際の震度データで戦う　積み木デュエル", AccentCyan, TextAnchor.MiddleCenter);
+
+        Text titleText = CreateLabel(panel.transform, "TitleText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 108, 900, 100, 46, "日本地震サバイバル", TextPrimary, TextAnchor.MiddleCenter);
         titleText.fontStyle = FontStyle.Bold;
 
-        Text subtitleText = CreateText(panel.transform, "SubtitleText", 0, 0, 900, 90, 20,
-            "都道府県を移動しながら、NPCと交互に積み木を積み上げよう。\n" +
-            "地震が来ると土台が揺れ、積み木が崩れることがある。\n" +
-            "先にブロックを崩した方の負け！");
-        subtitleText.alignment = TextAnchor.MiddleCenter;
-        subtitleText.color = new Color(0.85f, 0.85f, 0.9f);
+        CreateLabel(panel.transform, "SubtitleText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -20, 860, 100, 17,
+            "NPCと交互に、同じ土台へブロックを積み上げる。\n" +
+            "都道府県を移動すると、その土地に実際に起きた地震が土台を揺らす。\n" +
+            "先にブロックを崩した側の負け。",
+            TextMuted, TextAnchor.MiddleCenter);
 
-        difficultyText = CreateText(panel.transform, "DifficultyText", 0, -80, 900, 30, 18, "難易度：EASY");
-        difficultyText.alignment = TextAnchor.MiddleCenter;
-        difficultyText.color = new Color(0.85f, 0.85f, 0.9f);
+        difficultyText = CreateLabel(panel.transform, "DifficultyText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -96, 900, 28, 15, "難易度：EASY", AccentCyan, TextAnchor.MiddleCenter);
 
-        easyButton = CreateButton(panel.transform, "EasyButton", -220, -130, 140, 50, "EASY");
-        normalButton = CreateButton(panel.transform, "NormalButton", 0, -130, 140, 50, "NORMAL");
-        hardButton = CreateButton(panel.transform, "HardButton", 220, -130, 140, 50, "HARD");
+        Vector2 center = new Vector2(0.5f, 0.5f);
+        easyButton = CreateStyledButton(panel.transform, "EasyButton", center, center, -180, -148, 160, 52, "EASY", ButtonPrimary);
+        normalButton = CreateStyledButton(panel.transform, "NormalButton", center, center, 0, -148, 160, 52, "NORMAL", ButtonNeutral);
+        hardButton = CreateStyledButton(panel.transform, "HardButton", center, center, 180, -148, 160, 52, "HARD", ButtonNeutral);
 
-        startButton = CreateButton(panel.transform, "StartButton", 0, -210, 240, 70, "スタート");
+        startButton = CreateStyledButton(panel.transform, "StartButton", center, center, 0, -232, 260, 66, "ゲーム開始", ButtonGreen, 22);
 
         return panel;
     }
 
-    private static GameObject CreateRoundEndPanel(Transform parent, out Text scoreText, out Button restartButton)
+    private static GameObject CreateRoundEndPanel(Transform parent, out Text titleText, out Text detailText, out Button restartButton)
     {
         GameObject panel = new GameObject("RoundEndPanel");
-        SetupRect(panel, parent, 0, 0, 520, 400);
-        Image panelImage = panel.AddComponent<Image>();
-        panelImage.color = new Color(0, 0, 0, 0.82f);
+        SetupRect(panel, parent, 0, 0, 1280, 720);
+        Image scrim = panel.AddComponent<Image>();
+        scrim.color = new Color(0.03f, 0.04f, 0.06f, 0.78f);
 
-        Text titleText = CreateText(panel.transform, "RoundEndTitleText", 0, 150, 460, 60, 32, "決着！");
-        titleText.alignment = TextAnchor.MiddleCenter;
-        titleText.color = Color.white;
+        RectTransform body = CreateCard(panel.transform, "RoundEndCard", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 0, 560, 330, CardBgSolid, out _);
 
-        scoreText = CreateText(panel.transform, "RoundEndScoreText", 0, 20, 460, 180, 22, "");
-        scoreText.alignment = TextAnchor.MiddleCenter;
-        scoreText.color = Color.white;
+        CreateLabel(body, "RoundEndKicker", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -26, 480, 26, 14, "決着", TextMuted, TextAnchor.UpperCenter);
 
-        restartButton = CreateButton(panel.transform, "RestartButton", 0, -160, 200, 60, "リスタート");
+        titleText = CreateLabel(body, "RoundEndTitleText", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -56, 480, 60, 40, "勝　利", PlayerColor, TextAnchor.UpperCenter);
+        titleText.fontStyle = FontStyle.Bold;
+
+        GameObject rule = new GameObject("Rule");
+        SetupRectAnchored(rule, body, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -126, 120, 3);
+        rule.AddComponent<Image>().color = AccentCyan;
+
+        detailText = CreateLabel(body, "RoundEndScoreText", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -150, 480, 100, 16, "", TextPrimary, TextAnchor.UpperCenter);
+
+        restartButton = CreateStyledButton(body, "RestartButton", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), 0, 26, 240, 58, "もう一度たたかう", ButtonGreen);
 
         return panel;
     }
 
-    private static GameObject CreateButtonContainer(Transform parent)
+    // A full-screen overlay that appears whenever the forecaster has a fresh
+    // monthly forecast - meant to feel like a distinct event, not just a
+    // quiet text update.
+    private static GameObject CreateFortuneAnimationPanel(Transform parent, out Text forecastText, out Transform icon)
     {
-        // Placed below the intensity map panel (which now sits at the very
-        // top-right, see CreateIntensityMapPanel) so the two never overlap.
+        GameObject panel = new GameObject("FortuneAnimationPanel");
+        SetupRect(panel, parent, 0, 0, 1280, 720);
+        Image panelImage = panel.AddComponent<Image>();
+        panelImage.color = new Color(0.04f, 0.05f, 0.10f, 0.90f);
+        panel.SetActive(false);
+
+        GameObject halo = new GameObject("Halo");
+        SetupRectAnchored(halo, panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 60, 210, 210);
+        Image haloImage = halo.AddComponent<Image>();
+        haloImage.sprite = CircleSprite();
+        haloImage.color = new Color(0.31f, 0.76f, 0.97f, 0.16f);
+
+        GameObject iconObj = new GameObject("FortuneIcon");
+        RectTransform iconRect = SetupRectAnchored(iconObj, panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 60, 118, 118);
+        Image iconImage = iconObj.AddComponent<Image>();
+        iconImage.sprite = RoundedSprite();
+        iconImage.type = Image.Type.Sliced;
+        iconImage.color = AccentCyan;
+        iconRect.localRotation = Quaternion.Euler(0, 0, 45f);
+        icon = iconRect;
+
+        Text title = CreateLabel(panel.transform, "FortuneAnimationTitle", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 190, 700, 50, 26, "地震予報士の予報", TextPrimary, TextAnchor.MiddleCenter);
+        title.fontStyle = FontStyle.Bold;
+
+        forecastText = CreateLabel(panel.transform, "FortuneAnimationForecastText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -70, 820, 60, 20, "", TextPrimary, TextAnchor.MiddleCenter);
+
+        CreateLabel(panel.transform, "FortuneAnimationHint", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -130, 820, 30, 14, "左上の警戒マップに、今月ゆれる地域が色で示されます", TextMuted, TextAnchor.MiddleCenter);
+
+        return panel;
+    }
+
+    private static GameObject CreateButtonContainer(RectTransform moveCardBody)
+    {
         GameObject container = new GameObject("ButtonContainer");
-        SetupRectAnchored(container, parent, new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -260, 150, 300);
+        SetupRectAnchored(container, moveCardBody, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -44, 268, 232);
 
         GridLayoutGroup grid = container.AddComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(150, 36);
+        grid.cellSize = new Vector2(268, 34);
         grid.spacing = new Vector2(0, 6);
         grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
         grid.startAxis = GridLayoutGroup.Axis.Horizontal;
-        grid.childAlignment = TextAnchor.UpperLeft;
+        grid.childAlignment = TextAnchor.UpperCenter;
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        grid.constraintCount = 1; // single vertical column: current prefecture on top, reachable ones below
+        grid.constraintCount = 1; // single vertical column of reachable prefectures
 
         return container;
     }
 
-    // A small downward-pointing arrow floating above the tower, showing
-    // exactly where the next block will drop. No collider/rigidbody - it's
-    // pure visual guidance and must never interact with the physics blocks.
-    private static Transform CreateDropIndicator()
+    // A disabled template button that MapManager.Instantiate()s from at
+    // runtime. Kept inactive so it never shows up itself; it does not need
+    // to be a saved .prefab asset since Instantiate() works on any source
+    // GameObject reference.
+    private static Button CreatePrefectureButtonTemplate(Transform canvasParent)
     {
-        GameObject obj = new GameObject("DropIndicator");
-        var meshFilter = obj.AddComponent<MeshFilter>();
-        var meshRenderer = obj.AddComponent<MeshRenderer>();
-        meshRenderer.sharedMaterial = new Material(Shader.Find("Sprites/Default"));
-        meshRenderer.sharedMaterial.color = new Color(0.9f, 0.15f, 0.15f);
-
-        float w = 0.35f;
-        float h = 0.45f;
-        var mesh = new Mesh();
-        mesh.vertices = new[]
-        {
-            new Vector3(-w, h, 0), new Vector3(w, h, 0), new Vector3(0, 0, 0)
-        };
-        mesh.triangles = new[] { 0, 1, 2 };
-        mesh.RecalculateNormals();
-        meshFilter.mesh = mesh;
-
-        obj.transform.position = new Vector3(0, 7f, -0.5f);
-        return obj.transform;
+        Button button = CreateStyledButton(canvasParent, "PrefectureButtonTemplate", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 0, 268, 34, "都道府県", ButtonGreen, 15);
+        // MapManager tints the instantiated copies through this Image, so
+        // the ColorBlock must not override it back to a flat neutral.
+        ColorBlock colors = button.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f);
+        colors.pressedColor = new Color(0.8f, 0.8f, 0.8f);
+        colors.selectedColor = Color.white;
+        button.colors = colors;
+        button.gameObject.SetActive(false);
+        return button;
     }
 
-    // A schematic "intensity map": a fixed-size panel with one small marker
-    // per prefecture, positioned by projecting real lat/lon (no map artwork
-    // needed - the dots alone trace roughly the shape of Japan). Markers
-    // light up by intensity via IntensityMapView.SetIntensities().
+    // =====================================================================
+    // Intensity map
+    // =====================================================================
+
     private static readonly (string label, string hex)[] IntensityLegendEntries =
     {
         ("1/2", "4CAF50"),
@@ -425,50 +747,35 @@ public static class SceneBuilder
         ("7", "9C27B0"),
     };
 
-    // Placed in the vertical middle of the right-hand column - below the
-    // prefecture button list, above the shape-placement controls at the
-    // bottom - so it never overlaps either.
-    private static IntensityMapView CreateIntensityMapPanel(Transform parent)
+    // A geographically real map of Japan: every prefecture is its own filled
+    // polygon, colored by intensity.
+    private static IntensityMapView CreateIntensityMapPanel(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, string label, Color accent)
     {
-        // Top-right corner, above the prefecture button list (which is
-        // positioned below this panel - see CreateButtonContainer).
-        return CreateIntensityMapPanel(parent, "IntensityMapPanel", new Vector2(1f, 1f), new Vector2(1f, 1f), -20, -20, "今日の震度マップ");
-    }
-
-    // Generic version so the same map (shapes/legend/player marker) can be
-    // built at any anchor - used for the top-right transient alert map and
-    // the persistent left-side monthly forecast map.
-    private static IntensityMapView CreateIntensityMapPanel(Transform parent, string name, Vector2 anchor, Vector2 pivot, float x, float y, string label)
-    {
-        GameObject panel = new GameObject(name);
-        RectTransform panelRect = SetupRectAnchored(panel, parent, anchor, pivot, x, y, 280, 230);
-        Image panelImage = panel.AddComponent<Image>();
-        panelImage.color = new Color(0.93f, 0.93f, 0.95f);
-
-        Text labelText = CreateTextAnchored(panel.transform, "IntensityMapLabel", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -4, 260, 22, 14, label);
-        labelText.alignment = TextAnchor.UpperCenter;
-        labelText.color = Color.black;
+        RectTransform body = CreateCard(parent, name, anchor, pivot, x, y, 300, 252, CardBg, out GameObject root);
+        CreateCardHeader(body, label, accent);
 
         GameObject mapAreaObj = new GameObject("MapArea");
-        RectTransform mapAreaRect = SetupRectAnchored(mapAreaObj, panel.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -28, 260, 150);
+        RectTransform mapAreaRect = SetupRectAnchored(mapAreaObj, body, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -42, 264, 152);
 
-        IntensityMapView view = panel.AddComponent<IntensityMapView>();
+        IntensityMapView view = root.AddComponent<IntensityMapView>();
         view.mapArea = mapAreaRect;
+        view.seaColor = new Color(0.07f, 0.16f, 0.25f);
+        view.defaultColor = new Color(0.33f, 0.39f, 0.45f);
 
-        CreateIntensityLegend(panel.transform);
+        CreateIntensityLegend(body);
 
         return view;
     }
 
-    // A small color-swatch + label row along the bottom of the map panel,
-    // so the color coding (green/amber/orange/red/purple) is explained.
-    private static void CreateIntensityLegend(Transform panelTransform)
+    // A color-swatch + label row along the bottom of the map card, so the
+    // color coding (green/amber/orange/red/purple) is explained.
+    private static void CreateIntensityLegend(RectTransform body)
     {
         GameObject legendRow = new GameObject("IntensityLegend");
-        RectTransform legendRect = SetupRectAnchored(legendRow, panelTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), 0, 6, 260, 40);
+        RectTransform legendRect = SetupRectAnchored(legendRow, body, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), 0, 10, 268, 42);
 
         var grid = legendRow.AddComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(50, 36);
+        grid.cellSize = new Vector2(52, 40);
         grid.spacing = new Vector2(1, 0);
         grid.childAlignment = TextAnchor.MiddleCenter;
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
@@ -481,67 +788,13 @@ public static class SceneBuilder
             entryRect.SetParent(legendRect, false);
 
             GameObject swatch = new GameObject("Swatch");
-            var swatchRect = swatch.AddComponent<RectTransform>();
-            swatchRect.SetParent(entry.transform, false);
-            swatchRect.anchorMin = new Vector2(0.5f, 1f);
-            swatchRect.anchorMax = new Vector2(0.5f, 1f);
-            swatchRect.pivot = new Vector2(0.5f, 1f);
-            swatchRect.anchoredPosition = Vector2.zero;
-            swatchRect.sizeDelta = new Vector2(16, 16);
+            RectTransform swatchRect = SetupRectAnchored(swatch, entry.transform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, 0, 30, 8);
             var swatchImage = swatch.AddComponent<Image>();
+            swatchImage.sprite = RoundedSprite();
+            swatchImage.type = Image.Type.Sliced;
             if (ColorUtility.TryParseHtmlString("#" + hex, out var color)) swatchImage.color = color;
 
-            Text labelText = CreateTextAnchored(entry.transform, "Label", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -18, 50, 18, 10, label);
-            labelText.alignment = TextAnchor.UpperCenter;
-            labelText.color = Color.black;
+            CreateLabel(entry.transform, "Label", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -12, 52, 18, 10, label, TextMuted, TextAnchor.UpperCenter);
         }
-    }
-
-    // A full-screen overlay that appears whenever the fortune teller has a
-    // fresh forecast, with a spinning/pulsing icon and a chime - meant to
-    // feel like a distinct "event", not just a quiet text update.
-    private static GameObject CreateFortuneAnimationPanel(Transform parent, out Text forecastText, out Transform icon)
-    {
-        GameObject panel = new GameObject("FortuneAnimationPanel");
-        SetupRect(panel, parent, 0, 0, 1280, 720);
-        Image panelImage = panel.AddComponent<Image>();
-        panelImage.color = new Color(0.05f, 0.02f, 0.12f, 0.88f);
-        panel.SetActive(false);
-
-        GameObject iconObj = new GameObject("FortuneIcon");
-        var iconRect = iconObj.AddComponent<RectTransform>();
-        iconRect.SetParent(panel.transform, false);
-        iconRect.anchorMin = new Vector2(0.5f, 0.5f);
-        iconRect.anchorMax = new Vector2(0.5f, 0.5f);
-        iconRect.pivot = new Vector2(0.5f, 0.5f);
-        iconRect.anchoredPosition = new Vector2(0, 90);
-        iconRect.sizeDelta = new Vector2(120, 120);
-        var iconImage = iconObj.AddComponent<Image>();
-        iconImage.color = new Color(0.85f, 0.7f, 0.95f);
-        // A simple diamond so the spin/pulse animation is visible without needing a sprite asset.
-        iconRect.localRotation = Quaternion.Euler(0, 0, 45f);
-        icon = iconRect;
-
-        Text title = CreateText(panel.transform, "FortuneAnimationTitle", 0, 200, 700, 50, 28, "地震予報士の予報");
-        title.alignment = TextAnchor.MiddleCenter;
-        title.color = new Color(0.9f, 0.8f, 1f);
-        title.fontStyle = FontStyle.Bold;
-
-        forecastText = CreateText(panel.transform, "FortuneAnimationForecastText", 0, -60, 800, 100, 24, "");
-        forecastText.alignment = TextAnchor.MiddleCenter;
-        forecastText.color = Color.white;
-
-        return panel;
-    }
-
-    // A disabled template button that MapManager.Instantiate()s from at
-    // runtime. Kept inactive so it never shows up itself; it does not need
-    // to be a saved .prefab asset since Instantiate() works on any source
-    // GameObject reference.
-    private static Button CreatePrefectureButtonTemplate(Transform canvasParent)
-    {
-        Button button = CreateButton(canvasParent, "PrefectureButtonTemplate", 0, 0, 110, 36, "都道府県");
-        button.gameObject.SetActive(false);
-        return button;
     }
 }

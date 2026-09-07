@@ -45,7 +45,28 @@ namespace EarthquakeGame
         [Tooltip("Seconds the NPC waits before dropping its block, so its turn reads clearly instead of happening instantly.")]
         public float npcThinkDelay = 0.8f;
         public Difficulty difficulty = Difficulty.Easy;
-        public Text difficultyText;
+
+        [Header("NPC skill per difficulty")]
+        public NpcSkill easySkill = new NpcSkill { aimSpreadBlocks = 1.05f, rotationRange = 28f, dropHeight = 1.6f, blunderChance = 0.35f };
+        public NpcSkill normalSkill = new NpcSkill { aimSpreadBlocks = 0.30f, rotationRange = 9f, dropHeight = 0.9f, blunderChance = 0.10f };
+        public NpcSkill hardSkill = new NpcSkill { aimSpreadBlocks = 0.06f, rotationRange = 2f, dropHeight = 0.45f, blunderChance = 0f };
+
+        // How well the NPC stacks. A wide aim spread and a high drop make it
+        // knock the tower over itself (the player wins); a tight, gentle
+        // placement means the tower only ever falls on the player's watch.
+        [System.Serializable]
+        public class NpcSkill
+        {
+            [Tooltip("How far off the tower's top center the NPC aims, in block widths.")]
+            public float aimSpreadBlocks = 1f;
+            [Tooltip("Maximum random tilt, in degrees.")]
+            public float rotationRange = 25f;
+            [Tooltip("Height above the tower the block is released from - a longer fall hits harder.")]
+            public float dropHeight = 1.5f;
+            [Range(0f, 1f)]
+            [Tooltip("Chance of a genuinely careless throw with roughly double the usual spread.")]
+            public float blunderChance = 0.3f;
+        }
 
         [Header("UI (Text can be swapped for TMP_Text)")]
         public Text dateText;
@@ -53,11 +74,19 @@ namespace EarthquakeGame
         public Text currentPrefectureText;
         public Text latestEarthquakeText;
         public Text turnText;
+        public Image turnBadge;
+        public Text difficultyText;
+        public Text difficultyBadgeText;
+        public Button easyButton;
+        public Button normalButton;
+        public Button hardButton;
         public GameObject roundEndPanel;
+        public Text roundEndTitleText;
         public Text roundEndScoreText;
         public Transform dropIndicator;
         public GameObject shapePreview;
         public GameObject titleScreenPanel;
+        public GameObject earthquakeAlertPanel;
         public Text earthquakeAlertText;
         public IntensityMapView intensityMapView;
         [Tooltip("Persistent left-side map showing this month's forecasted warning areas - stays visible all month, unlike intensityMapView's brief alert flashes.")]
@@ -100,6 +129,7 @@ namespace EarthquakeGame
         void Start()
         {
             if (blockTowerManager != null) blockTowerManager.OnBlockFell += HandleBlockFell;
+            SetDifficulty(difficulty);
             StartNewGame();
             if (titleScreenPanel != null) titleScreenPanel.SetActive(true);
             if (bgmPlayer != null) bgmPlayer.Play();
@@ -132,11 +162,41 @@ namespace EarthquakeGame
         private void SetDifficulty(Difficulty value)
         {
             difficulty = value;
-            if (difficultyText != null)
-            {
-                string label = value == Difficulty.Easy ? "EASY" : value == Difficulty.Normal ? "NORMAL" : "HARD";
-                difficultyText.text = $"難易度：{label}";
-            }
+
+            string label = value == Difficulty.Easy ? "EASY" : value == Difficulty.Normal ? "NORMAL" : "HARD";
+            string blurb = value == Difficulty.Easy
+                ? "NPCの手はかなり雑。ほとんど勝てます。"
+                : value == Difficulty.Normal
+                    ? "NPCはそこそこ正確。実力は互角。"
+                    : "NPCはほぼ完璧に積みます。勝てたら本物。";
+
+            if (difficultyText != null) difficultyText.text = $"難易度：{label}　-　{blurb}";
+            if (difficultyBadgeText != null) difficultyBadgeText.text = $"難易度　{label}";
+
+            TintButton(easyButton, value == Difficulty.Easy);
+            TintButton(normalButton, value == Difficulty.Normal);
+            TintButton(hardButton, value == Difficulty.Hard);
+        }
+
+        // Buttons tint their graphic through a ColorBlock at runtime, so the
+        // selected state has to be set there rather than on the Image.
+        private void TintButton(Button button, bool selected)
+        {
+            if (button == null) return;
+            Color baseColor = selected ? new Color(0.20f, 0.62f, 0.86f) : new Color(0.20f, 0.24f, 0.31f);
+            ColorBlock colors = button.colors;
+            colors.normalColor = baseColor;
+            colors.highlightedColor = baseColor * 1.25f;
+            colors.pressedColor = baseColor * 0.8f;
+            colors.selectedColor = baseColor;
+            button.colors = colors;
+        }
+
+        private NpcSkill CurrentSkill()
+        {
+            return difficulty == Difficulty.Hard ? hardSkill
+                 : difficulty == Difficulty.Normal ? normalSkill
+                 : easySkill;
         }
 
         // Follows the mouse to preview where a block will drop, and places
@@ -201,15 +261,16 @@ namespace EarthquakeGame
             if (isGameOver) yield break;
 
             Vector2 npcSize = blockTowerManager.GetBlockSize();
-            // Harder difficulties aim closer to center and rotate less
-            // wildly, so the NPC is less likely to knock itself over.
-            float aimJitter = difficulty == Difficulty.Hard ? 0.15f : difficulty == Difficulty.Normal ? 0.4f : 0.8f;
-            float rotationRange = difficulty == Difficulty.Hard ? 5f : difficulty == Difficulty.Normal ? 15f : 30f;
-            float x = UnityEngine.Random.Range(-aimJitter, aimJitter) * blockTowerManager.baseHalfWidth;
-            float rotation = UnityEngine.Random.Range(-rotationRange, rotationRange);
+            NpcSkill skill = CurrentSkill();
+
+            // Aim at the top of the tower as it actually stands, off by the
+            // difficulty's spread (occasionally by a full blunder).
+            float spread = skill.aimSpreadBlocks * (UnityEngine.Random.value < skill.blunderChance ? 2.2f : 1f);
+            float x = blockTowerManager.GetTowerTopCenterX() + UnityEngine.Random.Range(-spread, spread) * npcSize.x;
+            float rotation = UnityEngine.Random.Range(-skill.rotationRange, skill.rotationRange);
 
             pendingFallCause = FallCause.NpcPlacement;
-            blockTowerManager.PlaceBlock(npcSize, x, rotation, BlockTowerManager.NpcBlockColor);
+            blockTowerManager.PlaceBlock(npcSize, x, rotation, BlockTowerManager.NpcBlockColor, skill.dropHeight);
 
             // Let the NPC's own block finish settling (and any resulting
             // fall get attributed to it) before the day advances and a
@@ -247,7 +308,7 @@ namespace EarthquakeGame
             if (blockTowerManager != null) blockTowerManager.ClearAllBlocks();
             if (roundEndPanel != null) roundEndPanel.SetActive(false);
             if (earthquakeAlertCoroutine != null) { StopCoroutine(earthquakeAlertCoroutine); earthquakeAlertCoroutine = null; }
-            if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
+            if (earthquakeAlertPanel != null) earthquakeAlertPanel.SetActive(false);
             if (intensityMapView != null) intensityMapView.ClearAll();
 
             currentForecast = fortuneTeller != null ? fortuneTeller.GetMonthlyForecast(currentDate) : "";
@@ -283,17 +344,22 @@ namespace EarthquakeGame
             if (shapePreview == null) return;
 
             // DestroyImmediate (not Destroy) so the old MeshFilter/Renderer
-            // are actually gone before AddComponent below runs in the same
-            // frame - otherwise Unity would complain about duplicates.
+            // and decal children are actually gone before the rebuild below
+            // runs in the same frame - otherwise Unity would complain about
+            // duplicate components and old decals would pile up.
             foreach (var comp in shapePreview.GetComponents<Component>())
             {
                 if (comp is Transform) continue;
                 DestroyImmediate(comp);
             }
+            for (int i = shapePreview.transform.childCount - 1; i >= 0; i--)
+            {
+                DestroyImmediate(shapePreview.transform.GetChild(i).gameObject);
+            }
 
             Color color = BlockTowerManager.PlayerBlockColor;
-            color.a = 0.6f;
-            ShapeMeshFactory.Apply(shapePreview, selectedSize, color, addCollider: false);
+            color.a = 0.55f;
+            ShapeMeshFactory.ApplyBlock(shapePreview, selectedSize, color, addCollider: false);
         }
 
         // Zooms out and pans up as the tower grows, so tall towers never
@@ -319,8 +385,8 @@ namespace EarthquakeGame
             manualZoomOffset = Mathf.Clamp(manualZoomOffset, manualZoomMin, manualZoomMax);
 
             float top = blockTowerManager.CurrentHeight; // above the base, base is at world Y ~ 0
-            float desiredHalfHeight = Mathf.Max(6f, (top + 3f) * 0.5f + 1f) + manualZoomOffset;
-            float desiredCenterY = Mathf.Max(3f, top * 0.5f + 1f) + manualPanYOffset;
+            float desiredHalfHeight = Mathf.Max(4f, (top + 2.5f) * 0.5f + 0.8f) + manualZoomOffset;
+            float desiredCenterY = Mathf.Max(2.2f, top * 0.5f + 0.8f) + manualPanYOffset;
 
             cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, desiredHalfHeight, Time.deltaTime * 4f);
 
@@ -425,21 +491,20 @@ namespace EarthquakeGame
                 // mixing them up caused the text to contradict the shake.
                 string intensityLabel = playerEvent?.GetIntensityFor(playerManager.CurrentPrefecture);
                 string yourAreaLine = feltShake && intensityLabel != null
-                    ? $"あなたの地域の震度：{intensityLabel}"
-                    : "あなたの地域では揺れは観測されませんでした";
-                earthquakeAlertText.text = $"地震発生！ 震央：{displayEvent.epicenter}　M{displayEvent.magnitude}\n{yourAreaLine}";
-                earthquakeAlertText.gameObject.SetActive(true);
+                    ? $"現在地は震度 {intensityLabel}"
+                    : "現在地では揺れを観測せず";
+                earthquakeAlertText.text = $"地震発生　震央：{displayEvent.epicenter}　M{displayEvent.magnitude}　／　{yourAreaLine}";
             }
+            if (earthquakeAlertPanel != null) earthquakeAlertPanel.SetActive(true);
 
             if (intensityMapView != null)
             {
                 intensityMapView.SetIntensities(displayEvent.intensities);
-                intensityMapView.BringToFront();
             }
 
             yield return new WaitForSeconds(duration);
 
-            if (earthquakeAlertText != null) earthquakeAlertText.gameObject.SetActive(false);
+            if (earthquakeAlertPanel != null) earthquakeAlertPanel.SetActive(false);
             if (intensityMapView != null) intensityMapView.ClearAll();
             earthquakeAlertCoroutine = null;
         }
@@ -482,28 +547,47 @@ namespace EarthquakeGame
         private void ShowGameOver(bool playerLost)
         {
             if (roundEndPanel != null) roundEndPanel.SetActive(true);
+
+            if (roundEndTitleText != null)
+            {
+                roundEndTitleText.text = playerLost ? "敗　北" : "勝　利";
+                roundEndTitleText.color = playerLost ? BlockTowerManager.NpcBlockColor : BlockTowerManager.PlayerBlockColor;
+            }
+
             if (roundEndScoreText != null)
             {
                 int finalCount = blockTowerManager != null ? blockTowerManager.AliveBlockCount : 0;
-                roundEndScoreText.text = playerLost
-                    ? $"あなたの積んだブロックが崩れました…\nNPCの勝ち！\n（{survivalDays}日目、{finalCount}個まで積み上がっていました）"
-                    : $"NPCの積んだブロックが崩れました！\nあなたの勝ち！\n（{survivalDays}日目、{finalCount}個まで積み上がっていました）";
+                string cause = pendingFallCause == FallCause.Earthquake
+                    ? $"{playerManager.CurrentPrefecture}を襲った地震でタワーが崩れました。"
+                    : playerLost
+                        ? "あなたが置いたブロックがタワーを崩しました。"
+                        : "NPCが置いたブロックがタワーを崩しました。";
+
+                roundEndScoreText.text =
+                    $"{cause}\n\n" +
+                    $"{survivalDays}日目　／　{finalCount}個まで積み上げました";
             }
         }
 
         private void RefreshUI(EarthquakeEvent latestEvent)
         {
-            if (dateText != null) dateText.text = $"日付：{currentDate:yyyy年M月d日}";
-            if (survivalDaysText != null) survivalDaysText.text = $"経過日数：{survivalDays}日目";
-            if (currentPrefectureText != null) currentPrefectureText.text = $"現在地：{playerManager.CurrentPrefecture}";
-            if (turnText != null) turnText.text = currentTurn == Turn.Player ? "あなたの番です" : "NPCの番です…";
+            if (dateText != null) dateText.text = $"{currentDate:yyyy年M月d日}";
+            if (survivalDaysText != null) survivalDaysText.text = $"{survivalDays}日目";
+            if (currentPrefectureText != null) currentPrefectureText.text = playerManager.CurrentPrefecture;
+
+            bool playerTurn = currentTurn == Turn.Player;
+            if (turnText != null) turnText.text = playerTurn ? "あなたの番" : "NPC 思考中…";
+            if (turnBadge != null)
+            {
+                turnBadge.color = playerTurn ? BlockTowerManager.PlayerBlockColor : BlockTowerManager.NpcBlockColor;
+            }
 
             if (latestEarthquakeText != null)
             {
                 latestEarthquakeText.text = latestEvent == null
-                    ? "最新の地震：なし"
-                    : $"震央：{latestEvent.epicenter}\nM：{latestEvent.magnitude}\n" +
-                      $"あなたの地域の震度：{latestEvent.GetIntensityFor(playerManager.CurrentPrefecture) ?? "観測なし"}";
+                    ? "まだ地震は起きていません"
+                    : $"震央 {latestEvent.epicenter}　M{latestEvent.magnitude}\n" +
+                      $"現在地の震度 {latestEvent.GetIntensityFor(playerManager.CurrentPrefecture) ?? "－"}";
             }
 
             if (mapManager != null)
