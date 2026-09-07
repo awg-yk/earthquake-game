@@ -39,8 +39,10 @@ public static class SceneBuilder
     private const float FontSizeMultiplier = 1.35f;
 
     // Narrow pedestal: a badly placed block has to actually tip off it, which
-    // is what makes the duel resolve and the difficulty levels matter.
-    private const float BaseHalfWidth = 1.8f;
+    // is what makes a collapse a real risk rather than a formality.
+    private const float BaseHalfWidth = 1.4f;
+    // How far each firm's site sits from the middle of the screen.
+    private const float SiteOffsetX = 2.3f;
 
     [MenuItem("Earthquake Game/Build Main Scene")]
     public static void BuildMainScene()
@@ -58,7 +60,11 @@ public static class SceneBuilder
         CreateGround();
         var (earthquakeSoundPlayer, fortuneChimePlayer, bgmPlayer) = CreateAudioPlayers();
         CreateLight();
-        Rigidbody2D basePlatform = CreateBasePlatform();
+
+        // Two sites side by side on the same ground: the same earthquake
+        // shakes both, so only the two firms' decisions differ.
+        Rigidbody2D playerBase = CreateBasePlatform("PlayerBasePlatform", -SiteOffsetX, BlockTowerManager.PlayerBlockColor);
+        Rigidbody2D npcBase = CreateBasePlatform("NpcBasePlatform", SiteOffsetX, BlockTowerManager.NpcBlockColor);
 
         Canvas canvas = CreateCanvas();
         CreateEventSystem();
@@ -70,15 +76,16 @@ public static class SceneBuilder
         Vector2 bottomCenter = new Vector2(0.5f, 0f);
         Vector2 bottomRight = new Vector2(1f, 0f);
 
-        // --- Top center: date / day / location, plus the turn badge -------
-        RectTransform infoCard = CreateCard(canvas.transform, "InfoCard", topCenter, topCenter, 0, -18, 440, 122);
-        Text dateText = CreateLabel(infoCard, "DateText", topCenter, topCenter, 0, -14, 400, 26, 15, "2000年1月1日", TextMuted, TextAnchor.UpperCenter);
-        Text survivalDaysText = CreateLabel(infoCard, "SurvivalDaysText", topCenter, topCenter, 0, -40, 400, 26, 15, "0日目", TextMuted, TextAnchor.UpperCenter);
-        Text currentPrefectureText = CreateLabel(infoCard, "CurrentPrefectureText", topCenter, topCenter, 0, -66, 400, 44, 26, "東京都", TextPrimary, TextAnchor.UpperCenter);
+        // --- Top center: calendar, site, and the two firms' earnings ------
+        RectTransform infoCard = CreateCard(canvas.transform, "InfoCard", topCenter, topCenter, 0, -18, 460, 140);
+        Text dateText = CreateLabel(infoCard, "DateText", topCenter, topCenter, 0, -12, 420, 26, 15, "2000年1月1日", TextMuted, TextAnchor.UpperCenter);
+        Text survivalDaysText = CreateLabel(infoCard, "SurvivalDaysText", topCenter, topCenter, 0, -36, 420, 26, 15, "残り 365日", TextMuted, TextAnchor.UpperCenter);
+        Text currentPrefectureText = CreateLabel(infoCard, "CurrentPrefectureText", topCenter, topCenter, 0, -62, 420, 44, 26, "東京都", TextPrimary, TextAnchor.UpperCenter);
         currentPrefectureText.fontStyle = FontStyle.Bold;
+        Text scoreText = CreateLabel(infoCard, "ScoreText", topCenter, topCenter, 0, -106, 430, 28, 15, "<あなた> 0万円　　<ライバル> 0万円", TextPrimary, TextAnchor.UpperCenter);
 
-        Image turnBadge = CreateBadge(canvas.transform, "TurnBadge", topCenter, topCenter, 0, -152, 240, 46, PlayerColor, out Text turnText);
-        turnText.text = "あなたの番";
+        Image siteRiskBadge = CreateBadge(canvas.transform, "SiteRiskBadge", topCenter, topCenter, 0, -170, 380, 44, new Color(0.20f, 0.40f, 0.32f), out Text siteRiskText);
+        siteRiskText.text = "今月の予報 なし　報酬 ×1.0";
 
         // --- Top left: this month's forecast map + difficulty badge -------
         IntensityMapView forecastMapView = CreateIntensityMapPanel(canvas.transform, "ForecastMapPanel", topLeft, topLeft, 20, -18, "今月の警戒マップ", AccentAmber);
@@ -94,21 +101,25 @@ public static class SceneBuilder
         Text latestEarthquakeText = CreateLabel(latestCard, "LatestEarthquakeText", topLeft, topLeft, 16, -42, 268, 56, 14, "まだ地震は起きていません", TextPrimary, TextAnchor.UpperLeft);
 
         RectTransform moveCard = CreateCard(canvas.transform, "MoveCard", topRight, topRight, -20, -398, 300, 286, out GameObject moveCardRoot);
-        CreateCardHeader(moveCard, "移動できる地域", AccentGreen);
+        CreateCardHeader(moveCard, "次の現場へ移る", AccentGreen);
+        CreateLabel(moveCard, "MoveCardNote", topLeft, topLeft, 16, -38, 268, 20, 11, "3日かかり、建設中のビルは放棄します", TextMuted, TextAnchor.UpperLeft);
         GameObject buttonContainer = CreateButtonContainer(moveCard);
         Button prefectureButtonTemplate = CreatePrefectureButtonTemplate(canvas.transform);
 
-        // --- Bottom right: rotation controls ------------------------------
-        RectTransform controlsCard = CreateCard(canvas.transform, "ControlsCard", bottomRight, bottomRight, -20, 20, 300, 112);
-        Button rotateLeftButton = CreateStyledButton(controlsCard, "RotateLeftButton", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), -58, -14, 104, 46, "⟲", ButtonNeutral, 22);
-        Button rotateRightButton = CreateStyledButton(controlsCard, "RotateRightButton", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 58, -14, 104, 46, "⟳", ButtonNeutral, 22);
-        CreateLabel(controlsCard, "PlacementHintText", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), 0, 12, 268, 26, 13, "ブロックを回転（Q / E）", TextMuted, TextAnchor.LowerCenter);
+        // --- Bottom right: the turn's action menu -------------------------
+        RectTransform controlsCard = CreateCard(canvas.transform, "ControlsCard", bottomRight, bottomRight, -20, 20, 300, 214);
+        CreateCardHeader(controlsCard, "この手で何をする", AccentCyan);
+        Button rotateLeftButton = CreateStyledButton(controlsCard, "RotateLeftButton", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), -58, -42, 104, 42, "⟲", ButtonNeutral, 20);
+        Button rotateRightButton = CreateStyledButton(controlsCard, "RotateRightButton", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 58, -42, 104, 42, "⟳", ButtonNeutral, 20);
+        Button waitButton = CreateStyledButton(controlsCard, "WaitButton", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -92, 268, 44, "揺れを待つ", ButtonNeutral, 17);
+        Button completeButton = CreateStyledButton(controlsCard, "CompleteButton", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -142, 268, 44, "竣工して引き渡す", ButtonGreen, 17);
+        CreateLabel(controlsCard, "PlacementHintText", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), 0, 8, 268, 22, 12, "画面をクリック：1段積む（1日）", TextMuted, TextAnchor.LowerCenter);
 
-        // --- Bottom left: controls cheat sheet ----------------------------
-        RectTransform hintCard = CreateCard(canvas.transform, "HintCard", bottomLeft, bottomLeft, 20, 20, 300, 112);
-        CreateCardHeader(hintCard, "操作", AccentCyan);
-        CreateLabel(hintCard, "HintText", topLeft, topLeft, 16, -42, 268, 64, 13,
-            "クリック　：ブロックを落とす\nQ / E　　：回転\n↑↓ / ホイール：カメラ移動・ズーム", TextMuted, TextAnchor.UpperLeft);
+        // --- Bottom left: the building under construction ------------------
+        RectTransform buildingCard = CreateCard(canvas.transform, "BuildingCard", bottomLeft, bottomLeft, 20, 20, 300, 170);
+        CreateCardHeader(buildingCard, "建設中のビル", PlayerColor);
+        Text buildingInfoText = CreateLabel(buildingCard, "BuildingInfoText", topLeft, topLeft, 16, -44, 268, 110, 14,
+            "更地です。\nクリックして建て始めましょう。", TextPrimary, TextAnchor.UpperLeft);
 
         // --- Bottom center: earthquake alert banner (hidden by default) ---
         GameObject earthquakeAlertPanel = CreateAlertBanner(canvas.transform, bottomCenter, out Text earthquakeAlertText);
@@ -129,7 +140,8 @@ public static class SceneBuilder
         GameObject earthquakeManagerObj = new GameObject("EarthquakeManager");
         GameObject mapManagerObj = new GameObject("MapManager");
         GameObject fortuneTellerObj = new GameObject("FortuneTeller");
-        GameObject blockTowerManagerObj = new GameObject("BlockTowerManager");
+        GameObject playerTowerObj = new GameObject("PlayerTower");
+        GameObject npcTowerObj = new GameObject("NpcTower");
 
         var gameManager = gameManagerObj.AddComponent<GameManager>();
         var playerManager = playerManagerObj.AddComponent<PlayerManager>();
@@ -137,22 +149,31 @@ public static class SceneBuilder
         var earthquakeManager = earthquakeManagerObj.AddComponent<EarthquakeManager>();
         var mapManager = mapManagerObj.AddComponent<MapManager>();
         var fortuneTeller = fortuneTellerObj.AddComponent<FortuneTeller>();
-        var blockTowerManager = blockTowerManagerObj.AddComponent<BlockTowerManager>();
 
-        blockTowerManager.baseRigidbody = basePlatform;
-        blockTowerManager.baseHalfWidth = BaseHalfWidth;
+        var playerTower = playerTowerObj.AddComponent<BlockTowerManager>();
+        playerTower.baseRigidbody = playerBase;
+        playerTower.baseHalfWidth = BaseHalfWidth;
+
+        var npcTower = npcTowerObj.AddComponent<BlockTowerManager>();
+        npcTower.baseRigidbody = npcBase;
+        npcTower.baseHalfWidth = BaseHalfWidth;
 
         gameManager.playerManager = playerManager;
         gameManager.earthquakeManager = earthquakeManager;
         gameManager.mapManager = mapManager;
         gameManager.fortuneTeller = fortuneTeller;
-        gameManager.blockTowerManager = blockTowerManager;
+        gameManager.playerTower = playerTower;
+        gameManager.npcTower = npcTower;
         gameManager.dateText = dateText;
         gameManager.survivalDaysText = survivalDaysText;
         gameManager.currentPrefectureText = currentPrefectureText;
+        gameManager.siteRiskText = siteRiskText;
+        gameManager.siteRiskBadge = siteRiskBadge;
+        gameManager.scoreText = scoreText;
+        gameManager.buildingInfoText = buildingInfoText;
         gameManager.latestEarthquakeText = latestEarthquakeText;
-        gameManager.turnText = turnText;
-        gameManager.turnBadge = turnBadge;
+        gameManager.waitButton = waitButton;
+        gameManager.completeButton = completeButton;
         gameManager.difficultyText = difficultyText;
         gameManager.difficultyBadgeText = difficultyBadgeText;
         gameManager.easyButton = easyButton;
@@ -184,6 +205,8 @@ public static class SceneBuilder
 
         UnityEventTools.AddVoidPersistentListener(rotateLeftButton.onClick, gameManager.RotateLeft);
         UnityEventTools.AddVoidPersistentListener(rotateRightButton.onClick, gameManager.RotateRight);
+        UnityEventTools.AddVoidPersistentListener(waitButton.onClick, gameManager.OnWaitClicked);
+        UnityEventTools.AddVoidPersistentListener(completeButton.onClick, gameManager.OnCompleteClicked);
         UnityEventTools.AddVoidPersistentListener(restartButton.onClick, gameManager.OnRestartClicked);
         UnityEventTools.AddVoidPersistentListener(startButton.onClick, gameManager.OnStartButtonClicked);
         UnityEventTools.AddVoidPersistentListener(easyButton.onClick, gameManager.SetDifficultyEasy);
@@ -300,10 +323,10 @@ public static class SceneBuilder
 
     // A wide, thin, kinematic platform that the block tower is built on.
     // BlockTowerManager moves it side-to-side to simulate an earthquake.
-    private static Rigidbody2D CreateBasePlatform()
+    private static Rigidbody2D CreateBasePlatform(string name, float centerX, Color siteColor)
     {
-        GameObject obj = new GameObject("BasePlatform");
-        obj.transform.position = new Vector3(0, 0, 0);
+        GameObject obj = new GameObject(name);
+        obj.transform.position = new Vector3(centerX, 0, 0);
         ShapeMeshFactory.Apply(obj, new Vector2(1f, 1f), new Color(0.19f, 0.23f, 0.29f));
         // Height stays 0.3 so the top surface lands exactly where
         // BlockTowerManager.GetBaseTopY() expects it (+0.15).
@@ -327,6 +350,12 @@ public static class SceneBuilder
 
         var rb = obj.AddComponent<Rigidbody2D>();
         rb.bodyType = RigidbodyType2D.Kinematic;
+
+        // A colored strip in front of the pedestal marks whose site it is.
+        GameObject marker = new GameObject(name + "Marker");
+        marker.transform.position = new Vector3(centerX, -0.28f, 0.5f);
+        ShapeMeshFactory.Apply(marker, new Vector2(BaseHalfWidth * 2f, 0.12f), siteColor, addCollider: false);
+
         return rb;
     }
 
@@ -614,15 +643,16 @@ public static class SceneBuilder
         SetupRectAnchored(bottomRule, panel.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 40, 420, 4);
         bottomRule.AddComponent<Image>().color = NpcColor;
 
-        CreateLabel(panel.transform, "Kicker", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 200, 900, 30, 16, "実際の震度データで戦う　積み木デュエル", AccentCyan, TextAnchor.MiddleCenter);
+        CreateLabel(panel.transform, "Kicker", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 200, 900, 30, 16, "実際の震度データで戦う　耐震ビル建設1年勝負", AccentCyan, TextAnchor.MiddleCenter);
 
         Text titleText = CreateLabel(panel.transform, "TitleText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 108, 900, 100, 46, "日本地震サバイバル", TextPrimary, TextAnchor.MiddleCenter);
         titleText.fontStyle = FontStyle.Bold;
 
-        CreateLabel(panel.transform, "SubtitleText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -20, 860, 100, 17,
-            "NPCと交互に、同じ土台へブロックを積み上げる。\n" +
-            "都道府県を移動すると、その土地に実際に起きた地震が土台を揺らす。\n" +
-            "先にブロックを崩した側の負け。",
+        CreateLabel(panel.transform, "SubtitleText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -24, 900, 130, 16,
+            "報酬 ＝ 高さ × 現場のリスク倍率 × 耐えた最大震度\n\n" +
+            "クリックで1段積む（1日）／「揺れを待つ」で地震が来るまで日を進める。\n" +
+            "揺れに耐えた建物ほど高く売れるが、崩れたら全損。ここぞで「竣工」して確定させる。\n" +
+            "予報マップで揺れる県へ移動すれば報酬倍率が上がる。12月31日時点で稼いだ額の多い方が勝ち。",
             TextMuted, TextAnchor.MiddleCenter);
 
         difficultyText = CreateLabel(panel.transform, "DifficultyText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -96, 900, 28, 15, "難易度：EASY", AccentCyan, TextAnchor.MiddleCenter);
@@ -646,7 +676,7 @@ public static class SceneBuilder
 
         RectTransform body = CreateCard(panel.transform, "RoundEndCard", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, 0, 560, 330, CardBgSolid, out _);
 
-        CreateLabel(body, "RoundEndKicker", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -26, 480, 26, 14, "決着", TextMuted, TextAnchor.UpperCenter);
+        CreateLabel(body, "RoundEndKicker", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -26, 480, 26, 14, "年末決算", TextMuted, TextAnchor.UpperCenter);
 
         titleText = CreateLabel(body, "RoundEndTitleText", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -56, 480, 60, 40, "勝　利", PlayerColor, TextAnchor.UpperCenter);
         titleText.fontStyle = FontStyle.Bold;
@@ -657,7 +687,7 @@ public static class SceneBuilder
 
         detailText = CreateLabel(body, "RoundEndScoreText", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -150, 480, 100, 16, "", TextPrimary, TextAnchor.UpperCenter);
 
-        restartButton = CreateStyledButton(body, "RestartButton", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), 0, 26, 240, 58, "もう一度たたかう", ButtonGreen);
+        restartButton = CreateStyledButton(body, "RestartButton", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), 0, 26, 260, 58, "次の年に挑む", ButtonGreen);
 
         return panel;
     }
@@ -693,7 +723,7 @@ public static class SceneBuilder
 
         forecastText = CreateLabel(panel.transform, "FortuneAnimationForecastText", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -70, 820, 60, 20, "", TextPrimary, TextAnchor.MiddleCenter);
 
-        CreateLabel(panel.transform, "FortuneAnimationHint", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -130, 820, 30, 14, "左上の警戒マップに、今月ゆれる地域が色で示されます", TextMuted, TextAnchor.MiddleCenter);
+        CreateLabel(panel.transform, "FortuneAnimationHint", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), 0, -130, 820, 30, 14, "左上のマップで色が濃い県ほど、今月の工事は高く売れます", TextMuted, TextAnchor.MiddleCenter);
 
         return panel;
     }
@@ -701,7 +731,7 @@ public static class SceneBuilder
     private static GameObject CreateButtonContainer(RectTransform moveCardBody)
     {
         GameObject container = new GameObject("ButtonContainer");
-        SetupRectAnchored(container, moveCardBody, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -44, 268, 232);
+        SetupRectAnchored(container, moveCardBody, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), 0, -62, 268, 214);
 
         GridLayoutGroup grid = container.AddComponent<GridLayoutGroup>();
         grid.cellSize = new Vector2(268, 34);
